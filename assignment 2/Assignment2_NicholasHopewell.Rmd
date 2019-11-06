@@ -1,0 +1,581 @@
+---
+title: 'Assignment #2 - AMOD 5250H'
+author: "Nick Hopewell"
+date: "release date: 5/23/2018"
+output: html_document
+mainfont: Calibri
+monofont: Courier New
+fontsize: 10pt
+    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+library(forcats)
+library(ggridges)
+library(ggplot2)
+library(ggthemes)
+library(scales)
+library(extrafont)
+library(knitr)
+library(tidyverse)
+library(gridExtra)
+library(knitr)
+library(kableExtra)
+```
+**Make sure your solution to each question includes enough output to show that your solution is correct (i.e if asked to create a vector, output the vector afterwards)**
+
+
+
+#Question #1 - Functions & If Statments [11 marks]
+a. Generate a vector containing *50* random numbers between *-200* and *200* (with replacement). [1 mark]
+```{r}
+
+( my.vec <- sample(-200:200, 50,  replace = TRUE) )
+```
+b. Write your own version of the absolute value function which accepts a vector, and uses the `ifelse` statement to create a new vector where all negative values are replaced with their positive equivalent, then returns the new vector. Use the vector in **(a)**, and output the results. [2 marks]
+```{r}
+my.abs <- function (vec) { 
+        ifelse(vec < 0, vec*-1, vec) 
+}
+
+my.abs(my.vec)
+
+```
+c. Write a function (called `f1`), which accepts two values `(x,y)`. If `x` is even, divide by *2*.  If its€™s odd, multiple by `y`. Use a complete if/else statement rather then ifelse. [2 marks]
+```{r}
+# dont need to use indexes or a forloop because I can just call mapply later
+f1 <- function (x, y) {
+                if (x %% 2 == 0)
+                        x = x / 2 
+                else 
+                        x = x * y
+        return (x)
+}
+
+f1(4, 3)
+f1(3, 3)
+mapply(c(1,2,3,4), c(1,2,3,4), FUN = f1)
+```
+d. Randomly generate two vectors (`x` should be *25* numbers between *1:100*, `y` should be *5* numbers between *1:10*, allow replacement in both). Use the `f1` function from **(c)** on these vectors to generate vector `z`.  Output `z`. [2 marks]
+```{r}
+x <- sample(1:100, 25, replace = TRUE)
+y <- sample(1:10, 5, replace = TRUE)
+
+cat(c("vector x:\n", x, "\n"))
+cat(c("vector y:\n", y, "\n"))
+# call mapply - multivariate sapply
+z <- mapply(x, y, FUN = f1)
+cat(c("function call:\n", z)) 
+```
+e. Create a function that accepts two arguments, an integer and a vector of integers. It returns `TRUE` if the integer is present in the vector, otherwise it returns `FALSE`. Make sure you pay careful attention to your placement of the return(`FALSE`) line in your function. [2 marks]
+```{r}
+# this is the best way to do it I think:
+
+my.element <- function(x, vec) {
+        if (!is.integer(x)) 
+                stop("'x' must be an integer") #prints error to user
+        if (!is.integer(vec))
+                stop("'vec' must be a vector of integers")
+        x %in% vec     # can also use:  match(x, vec, 0) > 0
+}
+
+x <- 5
+y <- c(1,2,3,4,5)
+cat("Data type of x: ", typeof(x), "\nData type of y: ", typeof(y))
+```
+```{r, error=T}
+# before converting to ints
+my.element(x, y)
+```
+```{r, error=T}
+# y not converted
+x <- as.integer(x)
+my.element(x, y)
+```
+```{r}
+# both integers
+y <- as.integer(y)
+my.element(x, y)
+```
+```{r}
+# alternative version using loop:
+
+my.element2 <- function(x, vec) {
+        if (!is.integer(x)) 
+                stop("'x' must be an integer")
+        if (!is.integer(vec))
+                stop("'vec' must be a vector of integers")
+        for (num in vec) {
+                if (x == num)
+                        return(TRUE)
+        } 
+        return(FALSE)
+}
+
+my.element2(x, y)
+```
+```{r}
+# false case: 
+
+#  L for integers
+bees <- 6L
+not.bees <- c(1L,2L,3L,4L,5L,7L)
+my.element2(bees, not.bees)
+```
+
+f. Create a function that accepts two arguments, an integer and a vector of integers. It returns the count of the number of occurrences of the integer in the input vector. [2 marks]
+```{r}
+# best way:
+
+count.same <- function (x, vec) {
+        if (!is.integer(x)) 
+                stop("'x' must be an integer")
+        if (!is.integer(vec))
+                stop("'vec' must be a vector of integers")
+        length( which(vec %in% x) )
+}
+
+
+count.same(x,y)
+```
+```{r}
+# with more matches:
+
+stuff <- as.integer(9)
+stuff2 <- as.integer(c(9,9,2,3,9,6,8,9,10))
+count.same(stuff, stuff2)
+```
+```{r}
+# worst way:
+
+count.same2 <- function (x, vec) {
+        if (!is.integer(x)) 
+                stop("'x' must be an integer")
+        if (!is.integer(vec))
+                stop("'vec' must be a vector of integers")
+        count <- 0
+        for(num in vec) {
+                if(x == num)
+                        count = count + 1
+        }
+        count
+}
+
+count.same2(x,y)
+count.same2(stuff, stuff2)
+```
+
+
+
+#Question #2 - Native Plotting [4 marks]
+Use `readr` to import the file primates.csv, and add the column names.  Using the R native `plot()` display the data in a scatterplot with brainwt vs bodywt. Add a title & axis labels to the plot.
+```{r}
+primates.data <- readr::read_csv("primates.csv")
+
+
+names(primates.data) # there always are col names, do you mean change the names?
+names(primates.data) <- c("Body.Weight", "Brain.Weight")
+names(primates.data)
+
+plot(x =primates.data$Brain.Weight, 
+     y =primates.data$Body.Weight, 
+     type = 'p',
+     main = 'Primate brain wieght vs body weight',
+     xlab = 'Body weight',
+     ylab = 'Brain weight'
+)
+```
+
+#Question #3 - Basic Data Prep [8 marks]
+a. Use the `readr` library to import enrollment.csv. [1 mark]
+```{r}
+enrollment.data <- readr::read_csv("enrollment.csv")
+```
+b. Give the columns proper names (they represent course year, term, course code, and enrollment). [1 mark]
+```{r}
+enroll.names <- c("Course.Year", "Term", "Course.Code", "Enrollment")
+names(enrollment.data) <- enroll.names
+
+# fix data:
+enrollment.data <- enrollment.data[5:27, 1:4]
+```
+c. Convert year and term into Factors with more meaningful values.  [1 mark]
+```{r}
+# one way:
+
+# lapply factor
+enrollment.data[ , c("Course.Year", "Term")] <- lapply(enrollment.data[ , c("Course.Year", "Term")], factor)
+# recode
+enrollment.data <- enrollment.data %>%
+                          mutate(
+                                  Course.Year = fct_recode(Course.Year,
+                                    "Year 1" = "1",
+                                    "Year 2" = "2",
+                                    "Year 3" = "3",
+                                    "Year 4" = "4" ),
+                                  Term =  fct_recode(Term,
+                                    "Winter" = "W",
+                                    "Fall" = "F")
+)
+
+# check:
+
+str(enrollment.data)
+glimpse(enrollment.data)
+
+```
+```{r}
+# another way: first reset data
+enrollment.data <- readr::read_csv("enrollment.csv")
+enroll.names <- c("Course.Year", "Term", "Course.Code", "Enrollment")
+names(enrollment.data) <- enroll.names
+enrollment.data <- enrollment.data[5:27, 1:4]
+
+# levels and labels
+c.labels <- c("Year 1", "Year 2", "Year 3", "Year 4")
+c.levels <- c(1,2,3,4)
+t.labels <- c("Fall", "Winter")
+t.levels <- c("F", "W")
+# using factor twice
+enrollment.data$Course.Year <- factor(enrollment.data$Course.Year, levels = c.levels, labels = c.labels) 
+enrollment.data$Term <- factor(enrollment.data$Term, levels = t.levels, labels = t.labels) 
+
+#check:
+str(enrollment.data)
+glimpse(enrollment.data)
+```
+
+
+d. Use the aggregate function to determine the sum of enrollments by year and term. [2 mark]
+```{r}
+# like from lecture
+enrollment.counts <- aggregate(Enrollment ~ Course.Year + Term, 
+                                 FUN=sum, enrollment.data)
+
+enrollment.counts
+```
+e. Graph your results professionally in a manner of your choice. [3 marks]
+```{r, fig.width=10}
+# side - by - side bar chart is for sure the way to go:
+
+
+ggplot(enrollment.counts, aes(y = Enrollment, 
+              x = Course.Year, fill = Term)) +
+        geom_bar(colour="darkgrey", stat = "identity", position = "dodge") +
+        geom_text(
+                aes(label = sprintf("%.0f", Enrollment), y = Enrollment, group = Term),
+                size = 3, position = position_dodge(width=0.9), vjust=-0.40
+        ) +
+        labs( 
+                fill = 'Term\n',
+                x = "",
+                y = "Total enrollment (# of students)\n", 
+                title = "Yearly enrollment in Trent COIS courses (by term)\n\n"
+        ) +
+        theme_tufte() + 
+        theme( 
+                text = element_text(size=11,  family = "Calibri (Body)"),
+                plot.title = element_text(hjust = 0)
+        ) +
+        scale_fill_few()
+
+```
+
+#Question #4 - Exploratory analysis [10 marks]
+a. Get and import the automobile data set from the UCI machine learning repository (https://archive.ics.uci.edu/ml/datasets/Automobile), be sure to read the Data Set Description to understand the dataset
+b. Do any data prep you think is necessary (Note: at minimum you'll need to covert missing values to proper NAs)
+c. Use functions and ggplot to do some exploratory analysis.  
+    - You must generate at least 3 different graphs (one of which should be faceted).  
+    - Each graph should be followed an analysis of what you this the graph shows. 
+    - Your overall analysis should include examples of using inline code in R markdown.  
+    
+__________________________________  
+
+  
+I will start by reading in the data, labeling columns, and then converting nominal data to factors manually. 
+After, I will print the structure of the data to see that it was done correctly.
+    
+    
+```{r}
+# read file, specifying params:
+
+automobile.data <- read.table("imports-85.data.txt", 
+                              sep = ",", 
+                              header = FALSE, 
+                              na.strings = "?", 
+                              stringsAsFactors = FALSE)
+
+# col names
+auto.names <- c("symboling", "normalized-losses", "make", "fuel-type", "aspiration", 
+                "num-of-doors", "body-style", "drive-wheels", "engine-location", 
+                "wheel-base", "length", "width", "height", "curb-weight", "engine-type", 
+                "num-of-cylinders", "engine-size", "fuel-system", "bore", "stroke", 
+                "compression-ratio", "horsepower", "peak-rpm", "city-mpg", "highway-mpg",
+                "price")
+names(automobile.data) <- auto.names # fix names
+
+
+# convert to factors:
+auto.factors <- c("fuel-type", "aspiration","num-of-doors", "body-style", "drive-wheels", 
+                  "engine-location", "engine-type", "num-of-cylinders","fuel-system")
+facs <- match(auto.factors, names(automobile.data))
+automobile.data[facs] <- lapply(automobile.data[facs], factor)
+
+# structure:
+str(automobile.data)
+
+```
+                
+
+Next, I will check summary stats for some of the interesting variables to look for obvious errors:
+
+```{r}
+summary(automobile.data)
+```
+Seems fine.    
+
+First, I will explore vehicle prices grouped by size and body style. 
+```{r}
+# 90% trimmed mean of prices by size and body
+
+size.body <- automobile.data%>%
+                  group_by(`num-of-doors`, `body-style`) %>%
+                  summarise(mean.price = mean(price, trim = 0.1, na.rm = T)) %>%
+                  drop_na()
+# make a nice table for show
+kable(size.body) %>%
+  kable_styling(bootstrap_options = "striped", full_width = F)
+```
+
+I will visualize the table above with prices in descending order and plots faceted by number of doors. 
+```{r, fig.width=10, fig.height=4}
+
+# first horizontal bar plot
+two.door.price <- size.body %>%
+                        mutate(`body-style` = fct_reorder(`body-style`, mean.price)) %>%
+                        filter(`num-of-doors` == 'two') %>%
+                        ggplot(aes(x=`body-style`, y = mean.price)) +
+                                geom_bar(stat="identity", fill = "lightskyblue", colour = "darkgrey") +
+                        geom_text(
+                                aes(label = sprintf("%.0f", mean.price), y = mean.price),
+                                size = 3, position = position_dodge(width=0.9), hjust=1.4
+                        ) +
+                                labs(title="90% trimmed mean prices of TWO-door vehicles", 
+                                      subtitle="by vehicle type\n",
+                                      x = "",
+                                      y = "\nPrice in USD") + 
+                        theme_tufte() +
+                        theme( axis.text.x = element_text(vjust=0.6),
+                               text = element_text(size=11,  family = "Calibri (Body)"),
+                               plot.title = element_text(hjust = 0)
+                        ) +
+                        coord_flip()
+# second horizontal bar plot
+four.door.price <- size.body %>%
+                        mutate(`body-style` = fct_reorder(`body-style`, mean.price)) %>%
+                        filter(`num-of-doors` == 'four') %>%
+                        ggplot(aes(x=`body-style`, y = mean.price)) +
+                                geom_bar(stat="identity", fill = "lightskyblue", colour = "darkgrey") +
+                                geom_text(
+                                        aes(label = sprintf("%.0f", mean.price), y = mean.price),
+                                        size = 3, position = position_dodge(width=0.9), hjust=1.4
+                                ) +
+                                labs(title="90% trimmed mean prices of FOUR-door vehicles", 
+                                      subtitle="by vehicle type\n",
+                                      x = "",
+                                      y = "\nPrice in USD") + 
+                        theme_tufte() +
+                        theme( axis.text.x = element_text(vjust=0.6),
+                               text = element_text(size=11,  family = "Calibri (Body)"),
+                               plot.title = element_text(hjust = 0)
+                        ) +
+                        coord_flip()
+
+# arrange with gridExtra
+grid.arrange(two.door.price, four.door.price, ncol=2)
+
+```
+```{r, echo=F}
+# filter based on body and number of doors
+converts <- automobile.data %>%
+        filter(`body-style` == "convertible" & `num-of-doors` == "two")
+
+hard.tops <- automobile.data %>%
+        filter(`body-style` == "hardtop" & `num-of-doors` == "two")
+
+```
+   
+I cut off 10% of the left and right tail of the price distribution to eliminate both very cheap and very expensive cars. More recent statistical thinking states that trimmed means are most representative of the data as they are robust to outliers, like the median, but also only ignores 10% of the data whereas the median strips away as much information as possible by ignoring every single value except for the 50th percentile data. As most monetary values are skewed (usually positively - i.e., house prices) I decided to trim these data.
+
+Looking at the two-door vehicles, it looks hardtops and convertibles have a much higher trimmed mean price compared to sedans and hatchbacks. In terms of four-door vehicles, sedans are the most expensive on average, followed by wagons and then hatchbacks. Interestingly, hatchbacks are the cheapest on average in both 2 and 4 door options (I didn't know that, but then again I know nothing about vehicles). Considering both plots together, two door convertibles and hardtops are by far the most expensive vehicles on average. This is most likely accounted for by more expensive sporty cars. If I did not trim the distribution of prices this difference would surely be even larger. In fact, the most expensive convertible in the complete data set is priced at $`r max(converts$price)` and the most expensive 2-door hardtop is priced at $`r max(hard.tops$price)`. Another thing to notice, despite being quite obvious, is that 4-door sedans are more expensive than 2-door sedans.  
+
+Another way to look at the relationship between price and vehicle type is to look at the price in terms of its distribution across different types. Note that I will be using the entire data set below.
+
+```{r, echo=F}
+# just body this time
+converts.2 <- automobile.data %>%
+        filter(`body-style` == "convertible")
+
+hard.tops.2 <- automobile.data %>%
+        filter(`body-style` == "hardtop")
+
+```
+```{r, fig.width=10}
+# plot the ridgeplot to compare distributions
+ggplot(automobile.data, aes(x = price, y = `body-style`, fill = `body-style`)) +
+        geom_density_ridges() +
+        labs(title="Price distribution", 
+              subtitle="by vehicle type\n",
+              caption="source: UCL Machine Learning Repository",
+              x = "\nPrice in USD",
+              y = "") +
+        theme_hc() +
+        theme(plot.title = element_text(size=14,  family = "Calibri (Body)"),
+              plot.subtitle = element_text(size=10,  family = "Calibri (Body)"),
+              plot.caption = element_text(size=8,  family = "Calibri (Body)"),
+              axis.text.x = element_text(size=10,  family = "Calibri (Body)"),
+              axis.text.y = element_text(size=10,  family = "Calibri (Body)"),
+              axis.title = element_text(size=11,  family = "Calibri (Body)"),
+              legend.position = "none") +
+        scale_fill_few()
+
+```
+This take on prices confirms what I originally said about monetary data often being positively skewed. Not surprisingly, the price of every car type is positively skewed with sedans, hardtops, and convertibles being very positively skewed. This plot also clearly shows that for all vehicle types, the majority of vehicles are worth around the $10,000 USD mark with convertibles being one noticeable stand-out. Hardtops don't really have a good location of centrality - their distribution is quite clearly bi modal although I would not expect it to be (a nice trailing off tail would be expected). The 'humpy' distributions of hardtops and convertibles almost certainly is a symptom of a small sample size as these vehicle types are not well-represented in these data. Of these data, there are `r nrow(converts.2)` convertibles (or about `r round(nrow(converts.2)/nrow(automobile.data), 2)`% of the data) and `r nrow(hard.tops.2)` hard tops (or about `r round(nrow(hard.tops.2)/nrow(automobile.data), 2)`% of the data). Adding more data for these vehicles types would surely smooth out the distribution and provide a more clear indication of central tendency.  
+
+
+Prices are interesting to explore, but what about gas consumption? It might be interesting to look at how each make of car differs in terms of miles per gallon.  
+
+The table below summaries the average highway miles be gallon for each make of car in these data. It should be noted that I will filter out makes which are not adequately represented in these data so some makes will not be included.
+
+
+```{r}
+# undesired
+to.drop <- c("alfa-romero", "chevrolet", "isuzu", "jaguar", "mercury", "renault") 
+highway.miles <- automobile.data%>%
+                          filter(!is.element(make, to.drop)) %>% # drop
+                          group_by(make) %>%
+                          summarise(mean.highway.miles = mean(`highway-mpg`, na.rm = T)) %>%
+                          drop_na()
+# table
+kable(highway.miles) %>%
+  kable_styling(bootstrap_options = "striped", full_width = F)
+
+```
+Here is a visualization of these highway miles per gallon numbers to clearly see which makes are ahead or behind their competition. 
+```{r, fig.width=6, fig.height=7, fig.align='center'}
+# make dotted plot of vehiles
+ggplot(highway.miles, aes(x=reorder(make, mean.highway.miles), y=mean.highway.miles)) + 
+          geom_point(col="purple3", size=3) +   
+          geom_segment(aes(x=make,     # draw actual dots across
+                           xend=make, 
+                           y=min(mean.highway.miles)-1, 
+                           yend=max(mean.highway.miles)+1), 
+                       linetype="dashed", 
+                       size=0.1) +   # Draw dashed lines
+          labs(title="Vehicle make vs highway mpg", 
+               caption="source: UCL Machine \nLearning Repository",
+               x="",
+               y = "\nAverage highway miles per hour") +  
+          theme_tufte()+
+          theme(plot.title = element_text(size=14,  family = "Calibri (Body)"),
+                plot.subtitle = element_text(size=10,  family = "Calibri (Body)"),
+                plot.caption = element_text(size=8,  family = "Calibri (Body)"),
+                axis.text.x = element_text(size=10,  family = "Calibri (Body)"),
+                axis.text.y = element_text(size=10,  family = "Calibri (Body)"),
+                axis.title = element_text(size=11,  family = "Calibri (Body)"),
+                legend.position = "none") +
+          coord_flip() # flip coords
+```
+  
+From this plot, it is clear that Honda and Volkswagen are the most efficient highway vehicles, Honda boasting an average of `r round(max(highway.miles$mean.highway.miles), 1)` highway miles per gallon. Audi and especially Mercedes-Bens have quite low average highway miles per gallon with Mercedes averaging only `r min(highway.miles$mean.highway.miles)` miles. In general there is a noticeable split in the plot in terms of mpg between Saab and Subaru. This split shows that the consumer-grade cars have much better average miles per gallon numbers than the higher-end luxury cars. That should be no surprise to anyone as one does not buy a luxury car for its fuel consumption rates.   
+  
+Finally, I would like to look at how horsepower and engine size might cluster together depending on the quality of the vehicle. I will first make a new factor of low, mid-range, expensive, and very expensive vehicles and use this new factor as a variable to facet my visualization.   
+```{r, fig.align='center'}
+
+# create new price range column and use to facet
+automobile.data %>%
+        mutate(Price.Range = ifelse(automobile.data$price < 8000, "Low",
+                                    ifelse(automobile.data$price < 17000, "Mid-Range",
+                                           ifelse(automobile.data$price < 28000, "High", "Very-High"))))%>%
+        drop_na() %>%
+        ggplot() +
+                geom_point(aes(horsepower, `engine-size`), color = "dodgerblue") +
+                facet_wrap(~ Price.Range, nrow = 2) + # here
+         labs(title="Horsepower vs engine size by price range", 
+               caption="source: UCL Machine Learning Repository",
+               x="\nHorsepower",
+               y = "Engine Size\n") +
+        theme_gdocs()
+
+
+```
+  
+Unfortunately, a lot of the high-end cars had NA values for horsepower or engine size so they were dropped from the plot, however, some interesting clusters are still noticeable. With the few very high-end cars on this plot, a trend towards large engines and strong horsepower is emerging. It is also clear when high and low-end cars are compared, the low end cars clearly have smaller engines and less horse power. Mid-range vehicles are a bit more scatter but the majority fall in between low and high-end which is to be expected. 
+
+\pagebreak
+
+#Question #5 - Graph Customization [7 marks]
+<center>
+![](Picture1.png)
+</center>
+
+Use the `iris` dataset from the `datasets package. Produce a scatterplot of petal length vs petal width using ggplot2. Modify the resulting graph so that it matches the above.
+
+- Color codes: '#1b9e77','#d95f02','#7570b3'
+- Major x axis lines: grey90
+- Major y axis lines: grey60
+- No minor axis lines
+
+<\br>  
+
+
+**NOTE ON THE PLOT BELOW :** The greys you gave me make the plot look nothing like yours - the y lines are supperrr dark. So I am just going to make it look like yours. 
+```{r, fig.width = 7, fig.height=6, fig.align = 'center'}
+#names(iris)
+# change cols
+iris.names <- c("Sepal.Length", "Sepal.Width",  "Petal.Length", "Petal.Width", "Iris Type")
+names(iris) <- iris.names
+
+# recode
+iris.types <- c("Iris-setosa", "Iris-versicolor", "Iris-virginica")
+iris$`Iris Type` <- factor(iris$`Iris Type`, levels = c("setosa", "versicolor", "virginica"),  labels = iris.types)
+
+
+# pallet to match
+jamie.pallet <- c('#1b9e77','#d95f02', '#7570b3')
+
+# same as Jamie's plot      
+ggplot(iris, aes(Petal.Length, Petal.Width)) +
+        geom_point(aes(color=`Iris Type`, shape=`Iris Type`), size = 2.5) +
+        labs( 
+                fill = 'Iris Type',
+                x = "Petal Length",
+                y = "Petal Width", 
+                title = "Iris Petal Length vs. Width") +
+        scale_color_manual(values = jamie.pallet) +
+        theme(plot.title = element_text(hjust = 0.5, size = 20, colour = '#7570b3'),
+              axis.title = element_text(size=16, colour = '#1b9e77'),
+              axis.text.x = element_text(size = 12),
+              axis.text.y = element_text(size = 12),
+              panel.background = element_blank(),
+              panel.grid.minor = element_blank(),
+              panel.grid.major.x = element_line(linetype = "dotted", size = 1, colour = "grey75"),
+              panel.grid.major.y = element_line(colour = "grey80"),
+              panel.border = element_rect(fill=NA,color="black", size=2.2, linetype="solid"),
+              legend.position="bottom",
+              legend.background = element_rect(size = 1, colour = "darkgrey"),
+              legend.text = element_text(size = 13),
+              legend.title = element_text(colour = '#d95f02', size=15),
+              legend.key.size = unit(1, "cm"),
+              legend.key.width = unit(1, "cm"))
+```
+
+
+
+
+
+
+
+

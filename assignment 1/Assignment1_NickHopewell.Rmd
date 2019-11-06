@@ -1,0 +1,383 @@
+---
+title: 'Assignment #1 - AMOD 5250H'
+author: "Nick Hopewell"
+date: "release date: 5/16/2018"
+output: html_document
+mainfont: Calibri
+monofont: Courier New
+fontsize: 10pt
+    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(tidyverse)
+```
+**Make sure your solution to each question includes enough output to show that your solution is correct (i.e if asked to create a vector, output the vector afterwards)**
+
+##Question #1 - Simple Boolean Operations [5 marks]
+a. Given a variable `x`, write a Boolean expression that evaluates to `TRUE` if the variable `x` is equal to `94842` (the numeric value).  [1 mark]
+
+```{r, cache=TRUE}
+x <- 94842
+x == 94842
+```
+
+b. Given a variable `x`, write a Boolean expression that evaluates to `TRUE` if the variable `x` is *not* `NA` (i.e., is not missing).[1 mark]
+
+```{r, cache=TRUE}
+# x != "NA" actually isnt correct because it will simply be false due to string comparison.
+# nor is x != NA correct due to how R treats NA's - R won't allow these boolean comparisons 
+# to prove this, see below:
+
+NA == "NA" # to prove the first point
+NA != NA
+NA == NA
+
+# so if I compare x to NA, it will also yeild NA:
+x != NA
+
+# comparing with functions like identical will work:
+identical(NA, NA)
+
+# As NA is its own data type in R, the correct R way to do this is the following:
+!is.na(x)
+
+```
+
+c. Given a (possibly negative) number `x`, write a Boolean expression that returns `TRUE` if and only if `x` is smaller than `-12` or bigger than `29`. [1 mark] 
+
+```{r, cache=TRUE}
+(x < -12) | (x > 29)
+```
+
+d. Given an integer number `x`, write a Boolean expression that returns `TRUE` if and only if `x` is an **odd** number between -8 and 12 or 100 and 150.  [2 marks]
+
+```{r, cache=TRUE}
+# equivalent to 'is in' (python):
+( x %% 2 != 0 ) &  ( (is.element(x, seq(-8, 12))) | (is.element(x, seq(100, 150))) )
+
+# alternative way with between() from dpylr:
+( x %% 2 !=0 ) & ( (between(x, -8, 12)) | (between(x, 100, 150)) )
+
+# as 3 functions:
+is.odd <- function(x) {
+        x %% 2 !=0
+}
+
+is.odd(x) & ( (between(x, -8, 12)) | (between(x, 100, 150)) )
+```
+
+##Question #2 – Vectors [17 marks]
+
+```{r, cache=TRUE}
+v1<-c(1.2, 5, 10, 3.7, -6, 13, -9.3, 7, -1.2, 17, 4, 5.6,15,-3.2,20)
+alice.prefs <- c("Twitter", "Chrome", "Mac", "Summer")
+bob.prefs <- c("Facebook", "Chrome", "PC", "Summer")
+age <- c(18, NA, 25, 71, NA, 45, NA, NA, 18)
+```
+a. Create and output a vector called `v2` which includes where the numbers from `1`-`4` where the `odd` numbers appear `3` times and the `even` numbers appear `5` times [1 mark]
+
+<br/>  
+
+**Note:** This is the most 'R' way I could figure out to do this in one line:
+can you tell me if that is bad style??? The pipe being on the same line.
+I find that really easy to read but I have no idea if others would.
+```{r, cache=TRUE}
+v2 <- 1:4
+
+
+v2 %>% rep(times = c(ifelse(v2 %% 2 != 0, 3, 5)))
+
+# as a function
+
+rep.nums <- function(vec) {
+        out.vec = c()
+        for (i in 1:length(vec)) {
+                if (i %% 2 != 0) {
+                        out.vec <- c(out.vec, c(rep(i, 3)))
+                } else {
+                        out.vec <- c(out.vec, c(rep(i, 5)))
+                }
+        }
+        return (out.vec)
+}
+
+# call func
+( v2 <- rep.nums(1:4) )
+
+
+
+```
+  
+b. Use `all.equal()` to compare `v1` to `v2`, `age` and `bob.prefs`.  For each comparison, briefly describe what the output is telling you. [2 marks]
+```{r, cache=TRUE}
+all.equal(v1, v2)
+all.equal(age, bob.prefs)
+```
+Looking at ?all.equal it seems that this tries to compare objects for similarity (referred to as 'near equality') rather  
+than exact equality like identical() would. The output of all.equal() returns differences between the objects passed.  
+Calling all.equal(v1, v2) outputs that the vectors are of different length. Vector v1 has 15 elements, vector v2 has 16 elements. Calling all.equal(age, bob.prefs) also returns that the vectors are of different lengths and that the vector types  
+are different, age being numeric and bob.prefs being of type character.
+
+
+c. Use a function to determine if `bob` and `alice` have `identical` preferences (all values are the same) [1 mark]
+```{r, cache = T}
+identical(bob.prefs, alice.prefs)
+
+# not sure if you meant write a function???
+
+my.identical <- function(vec1, vec2) {
+        vectors <- lapply(list(vec1, vec2), as.character)
+        vec.length <- sapply(vectors, length)
+        # loop vectors
+        for (i in 1:vec.length) {
+                #loop number of args
+                for (j in 1:nargs()) {
+                        if (vec1[i] != vec2[i]) {
+                                return (FALSE)
+                                break
+                        }
+                }
+        } 
+        # if loop doesn't break with FALSE
+        return (TRUE)
+}
+
+my.identical(bob.prefs, alice.prefs)
+```
+I'll try this function with identical = T
+```{r}
+stuff <- c(1, "I", "LOVE", "dogs", 78,  TRUE, 0.9, FALSE)
+more.stuff <- c(1, "I", "LOVE", "dogs", 78,  TRUE, 0.9, FALSE)
+# call function
+my.identical(stuff, more.stuff)
+```
+It does work.   
+
+
+d. Use a function to determine if `bob` and `alice` have any preferences in common. (at least one value is the same) [1 mark]
+```{r}
+# I already used the is.element function - to not return a vector of bools, just wrap in any():
+
+any(is.element(bob.prefs, alice.prefs))  
+
+
+# or I could just motify 2 lines of the function I made above if you wanted a novel function:
+
+any.identical <- function(vec1, vec2) {
+        vectors <- lapply(list(vec1, vec2), as.character)
+        vec.length <- sapply(vectors, length)
+        # loop vectors
+        for (i in 1:vec.length) {
+                #loop number of args
+                for (j in 1:nargs()) {
+                        if (vec1[i] == vec2[i]) {
+                                return (TRUE)
+                                break
+                        }
+                }
+        } 
+        # if loop doesn't break with TRUE
+        return (FALSE)
+}
+
+any.identical(bob.prefs, alice.prefs)
+```
+e. Write a Boolean expression that checks whether each entry of `age` is missing.  Your expression should return a Boolean vector having the same length as `age`. [1 mark]
+```{r}
+is.na(age)
+```
+f. Write code that returns the indexes of `age` that are missing. [1 mark]  
+
+**Note:** you said indexes here and values in question g so I will return indexes then values.
+```{r}
+# option 1:
+which(is.na(age))
+
+#option 2:
+na.get <- function(vec) {
+        return(which(is.na(vec)))
+}
+
+na.get(age)
+
+#option 3 for no reason at all:
+which(sapply(age, function(x) is.na(x)))
+
+#option 4:
+my.vec <- c()
+for( i in 1:length(age)) {
+        if( is.na(age[i]) == T) {
+                my.vec <- c(my.vec, i)
+        }
+}
+my.vec
+        
+```
+g. Write code that uses negative indexes and your solution from `(f)` to return only the values of `age` that are *not* missing. (i.e., your code should result in a vector with elements: 18, 25, 71, 45, 18) [1 mark]
+```{r}
+age[which(!is.na(age))]
+
+# unless you meant like this??
+miss <- which(is.na(age))
+age[-miss]
+```
+h. Using the negation operator `!` and the `is.na()` function, write an expression that returns only the values of `age` that are *not* missing. (Should result in the same vector as `(g)`) [1 mark]
+```{r}
+age[!is.na(age)]
+```
+i. Generate a vector of 25 random uniform decimal numbers between `-25` and `25`.  Do the same for whole numbers. [2 marks]
+```{r}
+runif(25, -25, 25)
+round(runif(25, -25, 25))
+```
+j. Using one of the vectors from `(i)` create a third vector containing a sample (with replacement) of `10` numbers. [1 mark]
+```{r}
+# one step:
+sample(round(runif(25, -25, 25)), size = 10, replace = TRUE)
+# two steps:
+my.rands <- round(runif(25, -25, 25))
+sample(my.rands, size = 10, replace = TRUE)
+```
+k. Without sorting, calculate and output the mean of `v1` without the largest and smallest values [2 marks]
+```{r}
+mean(v1[v1 < max(v1) & v1 > min(v1)])
+
+# or, if you really want to annoy people:
+# this is not only one line, but one tiny line with no subsetting. 50 DKP BONUS!
+mean(v1, trim = 0.1) 
+
+```
+l. Create and output a vector containing the floor of each value in an odd numbered position in `v1` [3 marks]  
+
+**odd POSITION** not an odd number.
+```{r}
+# two line solution:
+odds = seq(1, length(v1), by = 2)
+floor(v1[odds])
+
+#one line 
+floor(v1[seq(1, length(v1), by = 2)])
+```
+
+**For  k & l, you solution must assume you don't know what's in the vector.  Bonus marks if you can do each in only one line of code.**
+
+
+##Question #3 - Lists [6 marks]
+a. Create the following vectors [2 marks]
+    - `num` = `10` random numbers
+    - `sequence` = the sequence of numbers from `1` to `10`, by `.5`
+    - `words` = `"this", "is", "super", "fun"`
+    - `boo`l = `TRUE, FALSE, TRUE, TRUE, FALSE, TRUE, FALSE, FALSE`
+    
+```{r}
+
+num = runif(10)
+sequence = seq(1, 10, .5)
+words = c("this", "is", "super", "fun")
+bool = c(TRUE, FALSE, TRUE, TRUE, FALSE, TRUE, FALSE, FALSE)
+
+```
+b. Combine these vectors into a list called `stuff` and make sure each part of the list is named the same as its original vector [2 marks]
+```{r}
+( stuff <- list(num = num, 
+                sequence = sequence, 
+                words = words, 
+                bool = bool) )
+```
+c. Access the list to output just the words, then just the 3rd word. [2 marks]
+```{r}
+#first way
+stuff[[3]]
+#second way
+stuff$words
+
+stuff[[3]][3]
+#or
+stuff$words[3]
+```
+
+
+##Question #4 - Data Frames [12 marks]
+
+**When displaying your results for each question below, use head to limit the output to 7 rows**
+
+a. Load the `CO2` data from the `datasets` package, and use head to view the top of the file.  [2 marks] 
+```{r}
+# you don't need to load CO2, it's built in, can just call it directly
+head(CO2, 7)
+
+```
+```{r}
+# also useful:
+glimpse(CO2)
+```
+
+
+
+b. Use base R, output the following subsets of the data frame
+    - Just the `conc` column. [1 mark]
+    ```{r}
+    CO2$conc
+    ```
+    - Just the `fifth` row. [1 mark]
+    ```{r}
+     CO2[5, ]
+    ```
+    - The first `5` rows. [1 mark]
+    ```{r}
+    CO2[1:5, ]
+    ```
+    - Rows `10` to `15`. [1 mark]
+    ```{r}
+    CO2[c(10, 15), ]
+    ```
+    - The `plant`, `Treatment` and `uptake` columns [1 mark]
+    ```{r, eval = FALSE}
+    CO2[c('Plant', 'Treatment', 'uptake')]
+    ```
+    - The rows where `Treatment` equals `chilled` [1 mark]
+    ```{r, eval= FALSE}
+    # going tohide output...
+    
+    # one way
+    subset(CO2, Treatment == "chilled")
+    
+    # another way
+    CO2[which(CO2$Treatment =='chilled' ), ]
+    ```
+    - The rows where `Treatment` equals `chilled` and `uptake` <`10` [1 mark]
+    ```{r, eval=FALSE}
+    # using second way
+     CO2[which(CO2$Treatment == "chilled" & CO2$uptake < 10), ]
+    ```
+ 
+ c. Drop the `Type` column from the data frame [1 mark]
+```{r}
+# one way:
+ CO2$Type <- NULL 
+ colnames(CO2)
+ 
+# another way:
+ rm(CO2) # to reset it back to base out of my environment
+ CO2 <- CO2[-2]
+ colnames(CO2)
+ 
+```
+
+d. Add a column to the dataframe containing the results of `uptake`/`conc` [2 marks]
+```{r}
+# one way (without overwritting):
+CO2 %>%
+        mutate(new_col = uptake / conc) %>%
+        head()
+
+# not using dplyr:
+CO2["new_col"] <- CO2$uptake / CO2$conc
+head(CO2)
+```
+
+
+
+

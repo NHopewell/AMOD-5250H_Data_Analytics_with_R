@@ -1,0 +1,232 @@
+---
+title: 'Assignment #5 - AMOD 5250H'
+author: "Your Name Here"
+date: "release date: 6/19/2018"
+output: html_document
+
+    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(tidyverse)
+library(lubridate)
+
+
+
+```
+**Make sure your solution to each question includes enough output to show that your solution is correct (i.e if asked to create a vector, output the vector afterwards)**
+
+
+<br />  
+<br />  
+
+**NOTE FOR JAMIE** I did all this work in a script file on monday and put it all in an rmd file on tuesday. I didnt cache it or anything in the rmd first so it tried to research for everything on tuesday (as in 3 hours of streaming). Therefore, I will include the could but not evaluate any of it and simply put in the pictures into the file itself rather than generating them through knitting. 
+
+<br />    
+<br />  
+
+
+#Question 1 - Twitter [20 marks]
+You're going to be pulling data from Twitter so you'll need to setup and account and register an applications (Note: although you have to put in an website when registering your application, it can be any website so you can just use www.trentu.ca if you want)
+
+Go to Twitters search page (https://twitter.com/search-home?lang=en) and find a hashtag that is currently trending. 
+
+Use the rTweet library to access Twitter's REST API and pull any historical tweets with that hashtag.  
+
+Then use Twitters Streaming API to collect real-time tweets with the same hashtag for several hours.  
+
+Parse both collections into dataframes and add a variable indicating which method it was collected with.  Then combine the data frames into one.
+
+Use this data frame and the tidy text library to do some relevent text analaysis (this should include cleaning, tokenizing, frequencies, and a couple of interesting graphs)
+```{r, eval = F}
+library(rtweet)
+
+# create token
+create_token(
+    app = "nick_rtweet_app",
+    consumer_key = "luQHNvoCA9YC0028BczJuq3Ef",
+    consumer_secret = "iQTdYnn96OGTTsVZb9KQ1XaidH2odex8vwGXWycyUTjNEVzzjM", 
+    access_token = "1011282348028186628-kYF7MgFvHJWVW2phJVW0xH4qIH4983",
+    access_secret = "7ML5vff2UpidgTXoqZMWibtITQt2hhtr39yEpTd5FekrW")
+
+
+# search hashtage
+rt <- search_tweets("#MondayMotivation", n = 2000, include_rts = FALSE)
+rt <- rt %>%
+      mutate(method = "API")
+
+```
+I used the hastage #MotivationMonday as it was trending on Monday when I did the assignment. 
+
+
+```{r, eval = F}
+
+# streaming
+st <- stream_tweets(
+      "#MondayMotivation",
+      timeout = 60 * 60 * 3,
+      file_name = "motivationtweets.json", 
+      parse = FALSE
+)
+
+st <- parse_stream("motivationtweets.json") # parse into df
+
+st <- st %>%
+      mutate(method = "stream") # new column
+
+
+# comabine into one
+all_tweets <- inner_join(rt, st, by = "user_id")
+
+```
+
+```{r, eval = F}
+library(tidytext)
+library(tidyverse)
+library(stringr)
+library(wordcloud)
+library(gridExtra)
+
+# from lecture
+token.pattern <- "([^A-Za-z_\\d#@']|'(?![A-Za-z_\\d#@]))"
+clean.pattern = "(http[^ ]*)|(www\\.[^ ]*)|&amp;|&lt;|&gt;|RT|[[:cntrl:]]|\\'|\\!|\\,|\\?|\\.|\\:"
+hashtag.pattern <- "#[[:alnum:]]+"
+handle.pattern <- "@[[:alnum:]]+"
+handh.pattern <- "(@[[:alnum:]]+)|(#[[:alnum:]]+)"
+
+
+
+
+# jsut text and retweets
+tweets <- all_tweets %>% 
+      select(text.x, retweet_count.x, text.y, retweet_count.y)
+
+# clean tweets
+clean.tweets <- tweets %>% 
+      mutate(text.x = iconv(text.x, "latin1", "ASCII", ""),
+             text.y = iconv(text.y, "latin1", "ASCII", "")) %>%
+      mutate(text.x = str_replace_all(text.x, clean.pattern, ""),
+             text.x = str_replace_all(text.x, handle.pattern, ""),
+             text.x = str_replace_all(text.x, hashtag.pattern, ""),
+             text.y = str_replace_all(text.y, clean.pattern, ""),
+             text.y = str_replace_all(text.y, handle.pattern, ""),
+             text.y = str_replace_all(text.y, hashtag.pattern, "")) %>%
+      mutate(text.x = tolower(text.x),
+             text.y = tolower(text.y))
+
+
+
+# unnest tokens and filter out stop words
+all_tweets <- clean.tweets %>% 
+      unnest_tokens(word.x, text.x, token = "regex", pattern = token.pattern) %>%
+      unnest_tokens(word.y, text.y, token = "regex", pattern = token.pattern) %>%
+      filter(!word.x %in% stop_words$word,
+             str_detect(word.x, "[a-z]")) %>%
+      filter(!word.y %in% stop_words$word,
+             str_detect(word.y, "[a-z]"))
+```
+
+```{r, eval = F}
+# frequencies historical
+word_freq.x <- all_tweets %>% 
+      count(word.x, sort = TRUE)
+
+head(word_freq.x, 15)
+```
+
+![](C:\Desktop\Assignments\Data analytics with R\assignment 5\historic_words.png)
+
+```{r, eval = F}
+# freuqncies streaming
+word_freq.y <- all_tweets %>%
+      count(word.y, sort = TRUE)
+
+head(word_freq.y, 15)
+```
+
+![](C:\Desktop\Assignments\Data analytics with R\assignment 5\streaming_words.png)
+
+```{r, fig.width=12, fig.height=8, eval = F}
+# frequncies for historic data
+p1 <- ggplot(word_freq.x[1:10, ], aes(x = reorder(word.x, -n), y = n)) +
+            geom_bar(stat = "identity", fill = "dodgerblue", colour = "darkgrey") +
+            labs(title = "#MotivationMonday: Top ten most frequent words (historic data)",
+                 x = "",
+                 y = "count\n") +
+            theme_minimal()
+
+# frequencies for streamed data
+p2 <- ggplot(word_freq.y[1:10, ], aes(x = reorder(word.y, -n), y = n)) +
+            geom_bar(stat = "identity", fill = "tomato", colour = "darkgrey") +
+            labs(title = "#MotivationMonday: Top ten most frequent words (streamed data)",
+                 x = "",
+                 y = "count\n") +
+            theme_minimal()
+
+grid.arrange(p1, p2, ncol = 1) # arrange
+```
+
+<br />   
+
+Below are the most frequent terms of the historical and streaming data as bar charts. I probably could have filtered out Trump on both cases. 
+
+![](C:\Desktop\Assignments\Data analytics with R\assignment 5\historic_freq.png)
+![](C:\Desktop\Assignments\Data analytics with R\assignment 5\streaming_freq.png)
+
+<br />  
+
+
+
+```{r, fig.width = 8, fig.height=8, eval = F}
+colors <- c("grey80", "darkgoldenrod1", "tomato")
+colors2 <- colorRampPalette(brewer.pal(9,"Blues"))(32)[seq(8,32,6)]
+
+# word cloud for searched tweets 
+wc1 <- wordcloud(word_freq.x$word.x, 
+          word_freq.x$n, 
+          scale = c(3,.5), 
+          max.words = 100, 
+          random.order = FALSE, 
+          random.color = FALSE, 
+          colors = colors)
+
+# word cloud for streamed tweets
+wc2 <- wordcloud(word_freq.y$word.y, 
+          word_freq.y$n, 
+          scale = c(3,.5), 
+          max.words = 100, 
+          random.order = FALSE, 
+          random.color = FALSE, 
+          colors = colors2)
+
+grid.arrange(wc1, wc2, ncol = 1) # arrange
+
+```
+
+<br />   
+
+Below are a couple custom word clouds I made of the most frequent terms. I tried to make them as nice-looking as possible. 
+
+<center>![](C:\Desktop\Assignments\Data analytics with R\assignment 5\historic_cloud.png)<center>
+<center>![](C:\Desktop\Assignments\Data analytics with R\assignment 5\streaming_cloud.png)<center>
+
+<br />  
+
+
+
+
+#Question 2 - Shiny [15 marks]
+Using Shiny, and your frequncy Tweet data from above to generate an online interactive bar plot which shows the frequency of the top 10-50 words, you collected.  It should start by showing the top 10 words, but provide the user with a slider which allows them to change the number of words displayed up to 50.  Your final app should be uploaded to shinyapps.io, and you should provide a link to the live version.    
+
+
+**Note:**  
+
+No matter what I do the graph does not appear when I publish it. I have glone through the process about a dozen times. I'm really busy right now so I am just going to give you the ui and server in one file to show you it works.  
+
+Here is the link to the page that won't show the graph: https://welby93.shinyapps.io/myapp/  
+
+
+
+
+

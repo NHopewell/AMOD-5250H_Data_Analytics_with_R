@@ -1,0 +1,715 @@
+---
+title: 'Assignment #3 - AMOD 5250H'
+author: "Nicholas Hopewell"
+date: "release date: 5/30/2018"
+output: html_document
+mainfont: Calibri
+monofont: Courier New
+fontsize: 10pt
+    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(tidyverse)
+library(gridExtra)
+```
+**Make sure your solution to each question includes enough output to show that your solution is correct (i.e if asked to create a vector, output the vector afterwards)**
+
+#Question 1 - Looping [3 marks]
+a. 	Write a repeat loop that prints all the even numbers from 2-10, using a variable âi" that starts at 0
+```{r}
+x <- 0
+# no need for a condition
+repeat{
+      x = x + 2
+            print(x)
+      if (x == 10)
+            break
+}
+
+``` 
+b. 	Write a while loop that repeats 6 times and prints âHello world" each time
+```{r}
+cnt <- 1
+while(cnt < 7){
+      print("Hello world")
+      cnt = cnt +1
+}
+``` 
+c. 	Write a for loop that prints all the letters in y <- c("q", "w", "e", "r", "z", "c")
+```{r}
+y <- c("q", "w", "e", "r", "z", "c")
+
+for (letter in y)
+      print(letter)
+``` 
+
+#Question 2 -Basic Data Frame Merging [5 marks]
+
+```{r}
+x<-runif(20)
+y<-letters[3:22]
+z<-sample(c(rep(F,10),rep(T,10)))
+
+studNum1<-c(12,15,81,36,65)
+age<-c(18,19,18,21,22)
+gender<-c("male", "female", "male", "female", "female")
+studNum2<-c(15,62,74,65,45)
+course<-c("math", "english","biology", "math", "computer science")
+grade<-c(89,92,78,95,66)
+```
+a.	Create a dataframe called things by binding vectors x,y,z  in reverse order. [1 mark]
+```{r}
+# do you mean like columns in reverse order?? just like ....
+things <- data.frame(cbind(z, y, x))
+things
+
+
+# or do you mean like elements of each vector in reverse order? ...
+things <- data.frame(cbind(x, y, z)) %>%
+            sapply(rev)
+# this coerces everything into character
+things
+
+# using purrr
+things <- list(x = x,y = y, z = z) %>%
+                              map(rev) %>%
+                                  bind_rows %>%
+                                    data.frame()
+# this works as I would expect
+things
+
+
+#bind_rows(lapply(my.list, as.data.frame.list))
+
+# in one line :
+things <- setNames(data.frame(mapply(FUN = rev, list(x, y, z))), c("x", "y", "z"))
+things
+
+# check
+str(things)
+
+``` 
+b.	Create a dataframe called Group1 with (studNum1, age, gender), and a dataframe called Group2 with (studNum2, course, grade) [1 mark]
+```{r}
+# wrap with setNames to avoid two lines of code
+Group1 <- setNames(data.frame(studNum1, age, gender), c("Student Number", "Age", "Gender"))
+Group1
+Group2 <- setNames(data.frame(studNum2, course, grade), c("Student Number", "Course", "Grade"))
+Group2
+
+``` 
+c.	Merge the two dataframes together dropping all "unmatching" data  [1 mark]
+```{r}
+# using student id as key
+( commonGroups <- inner_join(Group1, Group2, by = "Student Number") )
+``` 
+d.	Merge the two data frames together keeping all of the data [1 mark]
+```{r}
+# join everything
+( allGroups <- full_join(Group1, Group2) )
+``` 
+e.	Using d) drop all rows that contain an NA in the grade column [1 mark]
+```{r}
+# tidyr drop
+allGroups %>%
+      drop_na(Grade)
+``` 
+
+Note: you can use the method of your choice (either Base R and/or tidyverse) for all the the above
+
+#Question 3 -Dplyr [8 marks]
+ 
+Use the `mtcars` dataset and the tools in the dplyr library to complete the following tasks:
+
+a. Return rows of cars that have an `mpg` value greater than 20 and 6 cylinders. [1 mark]
+```{r}
+mtcars %>%
+      filter(mpg > 20 & cyl == 6)
+``` 
+b. Reorder the Data Frame by `cyl` first, then by descending `wt`. [1 mark]
+```{r}
+mtcars %>%
+      arrange(cyl, desc(wt)) %>%
+      head()
+``` 
+c. Return a dataframe which contains just the `mpg` and `hp` columns. [1 mark]
+```{r}
+mtcars %>%
+      select(mpg, hp) %>%
+      head()
+``` 
+d. Return the distinct values of the `gear` column. [1 mark]
+```{r}
+mtcars %>%
+      distinct(gear)
+``` 
+e. Create a new column called "Performance" which is calculated by `hp` divided by `wt`. [1 mark]
+```{r}
+# make new col and bring to front just to how it easily
+( mtcars<- mtcars %>%
+            mutate("Performance" = hp / wt) %>%
+            select(Performance, everything()) %>%
+            head() )
+``` 
+f. Find the overall mean mpg. [1 mark]
+```{r}
+# mean
+mtcars %>%
+      summarise(mean(mpg, na.rm = T))
+
+# or just(not sure if we NEEDED to use dplyr for this, so)
+mean(mtcars$mpg, na.rm = T)
+``` 
+g. Use pipe operators to get the mean hp value for cars with 6 cylinders. [2 marks]
+```{r}
+# mean
+mtcars %>%
+      filter(cyl == 6) %>%
+      summarise(mean(hp, na.rm = TRUE))
+``` 
+
+#Question 4 - Joining [10 marks]
+
+Use mutating/filter joins to briefly answer the following questions (your answers should include inline RMarkdown where relevant).  You will need to use the nycflights13 data set examined in class.
+
+a. Create a dataframe which extends the flights dataframe location of the origin and destination (i.e. the lat and lon) to flights. [2 marks]
+```{r}
+
+# Note: I really am not sure if you just want lat and lon of one of the origin or destinations so I guess I will do it for both
+# that being said, the keyword in the above question, to me, is "extend" -  left_join makes sense
+
+library(nycflights13)
+# need to use flights and airports data sets
+
+# join with origin and faa
+orFlights <- nycflights13::flights%>%
+                  left_join(airports, c("origin" =  "faa")) %>%
+                  rename(lon_origin = lon,
+                         lat_origin = lat)
+
+# similar idea but for dest and only select relevant cols
+destFlgihts<- nycflights13::flights%>%
+                  left_join(airports, c("dest" =  "faa")) %>%
+                  rename(lon_dest = lon,
+                         lat_dest = lat) %>%
+                  select(lon_dest, lat_dest)
+
+# bind_cols together (add 2 new cols to data set)
+allFlights <- bind_cols(orFlights, destFlgihts)
+
+names(allFlights)
+
+``` 
+```{r}
+# look at columns in quesiton:
+allFlights %>%
+      select(origin, lon_origin, lat_origin, dest, lon_dest, lat_dest) %>%
+      head
+```
+
+b. Is there a relationship between the age of a plane and its delays? [2 marks]
+
+First I will determine plane age by subtracting the make year from the max make year +1 (to be conservative)
+```{r, }
+planes <- planes %>%
+            rename(Plane_year = year)
+
+max(planes$Plane_year, na.rm =T)
+
+planes <- planes %>%
+      mutate(Age_of_plane = 2014 - Plane_year)
+      
+``` 
+```{r, cache = T}
+library(broom)
+
+# join then pipe into cor.test using broom to tidy stats
+
+flights %>%
+      inner_join(planes, by = "tailnum") %>%
+      do(tidy(cor.test(.$Age_of_plane, .$dep_delay)))
+```
+Looks like there is a significant negative correlation between departure delays and age of a plane. The newer a plane is (in terms of year since made), on average, it's departure delays are higher. Basically, newer planes see more delays on average. This seems possibly spurious to me as it does not make much sense. The only mental leap I can make to propose an explanation for this is that newer planes are the ones used to carry passengers for *most* trips (the ones which carry lots of people).  On the other hand, perhaps older planes are used for more special occasions or maybe personal or small aircraft and thus are less likely to be delayed simply because they fly less. In general, one would imagine more newer planes to be in the sky than older planes (which is probably accounting for this effect by skewing the distribution).  
+
+Interpreting Pearsons R as it ought to be interpreted (as an effect size), the strength of the linear relationship between departure delays and plane age is weak (but significant at a $p$ < .001 level due to the sample size ($n$ = `r nrow(flights %>% inner_join(planes, by = "tailnum"))`). Larger sample sizes have the statistical power to detect a significant effect even when that effect may not be powerful and in some cases may not even be meaningful. In traditional inferential statistics, this sample size would be considered large. The detection and handling of spurious effects found in large samples is one of the key limitations of big data analytics.  
+
+Looking at arrival delays:
+```{r, cache = T}
+flights %>%
+      inner_join(planes, by = "tailnum") %>%
+      do(tidy(cor.test(.$Age_of_plane, .$arr_delay)))
+```
+Arrival delays are also significantly negatively correlated with age of the plane. Again, the correlation is weak but the probability of obtaining such an R statistic if there null hypothesis were indeed true (the variables are not related) is incredibly small (again, a sample size vs effect size debate).   
+
+I normally like to look at confidence intervals rather than point estimates as I find point estimates like fishing for a population parameter with a spear whereas confidence intervals are like fishing with a net. That being said, the upper ends of the intervals for both relationships barely reach ~0.02. Very weak, but significant.  
+
+ In this case, I can simply look at a scatter plot to see a linear relationship between the variables: 
+ 
+```{r, cache=T, fig.width=10}
+library(gridExtra)
+
+flights %>%
+      inner_join(planes, by = "tailnum") %>%
+      ggplot(., aes(x=Age_of_plane, y=dep_delay)) +
+            geom_point()+
+            geom_smooth(method=lm) -> p1
+
+flights %>%
+      inner_join(planes, by = "tailnum") %>%
+      ggplot(., aes(x=Age_of_plane, y=arr_delay)) +
+            geom_point() +
+            geom_smooth(method=lm)-> p2
+
+grid.arrange(p1, p2, ncol = 2)
+      
+
+```
+ Looking at the plot above, the first thing I see actually isn't the outlier in the top right. Instead, my hypothesis seems to be pretty accurate. In this sample, older planes are not represented nearly to the extent of newer planes (which is good for safety reasons). It seems most flights use relatively newer planes and so we have much more data to look at for these planes and thus the range and variability of delays is inevitably going to be much more spread. I might remove this outlier but instead, I am going to check parametric assumptions because I almost guarantee they are being violated and thus interpreting R is not valid. Outliers actually are a problem for Pearsons so I will probably remove it. I should have probably checked these assumptions first but it is interesting to see what a parametric test says when assumptions might be violated vs what a plot says (which is usually more informative in my opinion). 
+ 
+**Interval or better?**
+
+Check. 
+ 
+**Normality**
+
+One does not simply test normality in one way.  
+
+First I will plot the variables to look at their distributions (I will add mean and sd to plot). You might ask: 'why does Nick keep inner joining the data sets instead of just saving the results to a new data frame?' Good question. 
+```{r, cache=T, fig.width=10}
+flightsPlanes <- flights %>%
+                  inner_join(planes, by = "tailnum")
+
+# histogram
+p1_hist <- flightsPlanes %>%
+                  ggplot(., aes(dep_delay)) + 
+                    theme(legend.position = "none") + 
+                    geom_histogram(aes(y=..density..), binwidth = 10, colour="black", fill="white") +
+                    labs(x="Departure delay", y = "Density")+
+                    stat_function(fun = dnorm, 
+                                  args = list(mean = mean(flightsPlanes$dep_delay, na.rm = TRUE), 
+                                              sd = sd(flightsPlanes$dep_delay, na.rm = TRUE)), 
+                                  colour = "black", size = 1)
+
+# qqplot
+p1_qq <- flightsPlanes %>%
+      ggplot(., aes(sample = dep_delay)) +
+      stat_qq() +
+      labs(x="Theoretical quantiles", y = "Sample quntiles (departure delay)")
+
+
+# arrange side-by-side
+grid.arrange(p1_hist, p1_qq, ncol = 2, top = "Departure Delay")
+
+```
+  
+Very positively skewed - no where near normally distributed. Mainly due to those outliers. I really don't have to do the same thing for arrival delay because it is a very similar distribution but I will anyways. 
+
+```{r, cache = T, fig.width=10}
+p2_hist <- flightsPlanes %>%
+                  ggplot(., aes(arr_delay)) + 
+                    theme(legend.position = "none") + 
+                    geom_histogram(aes(y=..density..), binwidth = 10, colour="black", fill="white") +
+                    labs(x="Arrival Delay", y = "Density")+
+                    stat_function(fun = dnorm, 
+                                  args = list(mean = mean(flightsPlanes$arr_delay, na.rm = TRUE), 
+                                              sd = sd(flightsPlanes$arr_delay, na.rm = TRUE)), 
+                                  colour = "black", size = 1)
+
+p2_qq <- flightsPlanes %>%
+      ggplot(., aes(sample = arr_delay)) +
+      stat_qq() +
+      labs(x="Theoretical quantiles", y = "Sample quntiles (arrival delay)")
+
+
+grid.arrange(p2_hist, p2_qq, ncol = 2, top = "Arrival Delay")
+```
+Slightly less skewed but still very positively skewed.  
+
+What about age of plane? (I already know this is skewed positively).
+```{r, fig.width=10, cache=T}
+p3_hist <- flightsPlanes %>%
+                  ggplot(., aes(Age_of_plane)) + 
+                    theme(legend.position = "none") + 
+                    geom_histogram(aes(y=..density..), binwidth = 10, colour="black", fill="white") +
+                    labs(x="Age of Plane", y = "Density")+
+                    stat_function(fun = dnorm, 
+                                  args = list(mean = mean(flightsPlanes$Age_of_plane, na.rm = TRUE), 
+                                              sd = sd(flightsPlanes$Age_of_plane, na.rm = TRUE)), 
+                                  colour = "black", size = 1)
+
+p3_qq <- flightsPlanes %>%
+      ggplot(., aes(sample = Age_of_plane)) +
+      stat_qq() +
+      labs(x="Theoretical quantiles", y = "Sample quntiles (age of Plane)")
+
+
+grid.arrange(p3_hist, p3_qq, ncol = 2, top = "Age of Plane")
+```
+Like previously mentioned, it is positively skewed (not as skewed as the other variables, though) with more planes coming from more recent years.  
+
+**Bivariate Linerity**
+
+One might think I checked this already with my first scatterplots. Actually, I only fit a linear model to the data. Now I will compare that fit lm to a natural trend line. I will stretch the plot out and zoom in to see how the fits differ more easily.
+
+```{r, figt.width = 10, fig.height=5, cache=T, message=F, warning=F}
+
+s1 <- ggplot(flightsPlanes, aes(Age_of_plane, dep_delay))+
+              geom_point(alpha = 0.01) + 
+              geom_smooth(colour="Blue") + # trend line
+              geom_smooth(method = "lm",  #ADD BEST FIT LINE (LINEAR MODEL)
+                          colour = "Red") +
+              scale_y_continuous(limits=c(0, 200)) +
+              labs(x = "Age of plane",    
+                   y = "departure delay")
+
+s2 <- ggplot(flightsPlanes, aes(Age_of_plane, arr_delay))+
+              geom_point(alpha = 0.01) + 
+              geom_smooth(colour="Blue") + # trend line
+              geom_smooth(method = "lm",  #ADD BEST FIT LINE (LINEAR MODEL)
+                          colour = "Red") +
+              scale_y_continuous(limits=c(0, 200)) +
+              labs(x = "Age of plane",    
+                   y = "arrival delay")
+
+grid.arrange(s1, s2, ncol=2, top = "Age of plan vs departure and arrival delay")
+```
+  
+Not surprisingly due to the amount of data, the fits basically completely overlap even at this adjusted resolution. This assumption is fine.
+
+
+**Outliers**
+
+Outliers are usually an issue when they have high leverage across the x-axis. There are surely outliers but let's look in more detail:
+```{r, cache=T}
+
+# interesting way to make a side-by-side boxplot
+flightsPlanes %>%
+      select(Age_of_plane, dep_delay, arr_delay) %>% 
+      gather("id", "value",1:3) %>% 
+            ggplot(., aes(x = id, y = value))+
+                 geom_boxplot() +
+                 labs(x = "", y = "value")
+
+```
+  
+There appears to be a lot of outliers and even some very extreme outliers far beyond 1.5 x the inter quartile range. This is obvious with distributions as skewed as these are.   
+
+Because these assumptions are violated, I will get  **bootstrap estimates of the correlation statistic**. I will do 10000 resamples. I will start with departure delays.
+```{r, cache = T}
+data <- flightsPlanes[, c("Age_of_plane", "dep_delay")]
+N <- nrow(data)
+reps <- 10000
+
+my.cor <- cor(data)[1,2]
+boot.cor <- c()
+newResults = data.frame(boot.cor )
+
+
+for (i in 1:reps) {
+  idx <- sample.int(N,N, replace = TRUE) 
+  this.cor <- cor(data[idx, ], use = "complete.obs")[1,2] 
+  boot.cor[i] <- this.cor
+}
+
+```
+Now to plot the bootstrap correlations with the original correlation annotated as a red dashed line:
+
+```{r, fig.width= 10, cache = T} 
+
+# hist results and add line
+
+ggplot(newResults, aes(boot.cor)) +
+  theme(legend.position = "none") +
+  geom_histogram(aes(y=..density..), colour="black", fill="grey") +
+  geom_vline(xintercept = -0.01535396, colour = "red", linetype = "dotted", size = 1.5)+
+  labs(x= "Bootstrap Correlation Coefficients", 
+       y = "Proportion of Simulated Scenarios")
+
+```
+
+Now I can look at a bootstrap confidence interval using quantile():
+```{r, cache = T}
+quantile(boot.cor, c(0.025, 0.975))
+```
+Now the same for arrival delays:
+```{r, cache = T}
+data <- flightsPlanes[, c("Age_of_plane", "arr_delay")]
+N <- nrow(data)
+reps <- 10000
+
+my.cor <- cor(data)[1,2]
+boot.cor <- c()
+newResults = data.frame(boot.cor )
+
+
+for (i in 1:reps) {
+  idx <- sample.int(N,N, replace = TRUE) 
+  this.cor <- cor(data[idx, ], use = "complete.obs")[1,2] 
+  boot.cor[i] <- this.cor
+}
+```
+  
+```{r, fig.width= 10, cache = T} 
+
+# hist results and add line
+
+ggplot(newResults, aes(boot.cor)) +
+  theme(legend.position = "none") +
+  geom_histogram(aes(y=..density..), colour="black", fill="grey") +
+  geom_vline(xintercept = -0.01767153, colour = "red", linetype = "dotted", size = 1.5)+
+  labs(x= "Bootstrap Correlation Coefficients", 
+       y = "Proportion of Simulated Scenarios")
+
+```
+  
+
+And the confidence interval:
+```{r, cache = T}
+quantile(boot.cor, c(0.025, 0.975))
+```
+  
+
+There we have it, a robust estimation of the relationship without relying on non-parametric tests but rather bootstraps.  
+  
+So... The original question you asked was: *Is there a relationship between age of the plane and delays?* The **answer** is, yes there is BUT it is really weak,\not very meaningful in the real world, and is most likely nothing more than a statistical artifact discovered through this large sample size. With large sample sizes, one can find a statistically significant relationship between variables which have no meaningful relationship. My bootstrap confidence intervals are probably the best estimate of the actual relationship that we will get. If the distribution of plane ages were balanced and outliers removed there would be no real relationship. I would hesitate to call this a meaningful relationship even with these tiny p-values - to do that would be disregard Pearsons R as an effect size. That being said, even tiny correlations might have a real influence when many, many observations are considered. I don't think that is the case here. 
+
+...  
+
+
+c. What weather conditions make it more likely to see a delay? [2 marks]  
+
+
+**for this next question, R simply won't let me use ANY type of join OR merge() with "by = 'origin'" ... it just runs for ages and crashes rstudio or gives me an error which simply doesn't make sense after researching it. I am just going to not use 'by = ' so I can actually do this question.**
+
+```{r, cache = T}
+flightsWeather <- inner_join(flights, weather)
+
+names(flightsWeather)
+``` 
+  
+I'm not going to go crazy on this - it could be done in so many ways. The last question exhausted my 2-point question efforts.
+```{r}
+library(corrplot)
+
+# select cols and 
+depWeather <- flightsWeather %>%
+                  select(dep_delay, arr_delay, temp, humid, wind_speed, wind_gust, 
+                          precip, pressure, visib) 
+
+round(cor(depWeather, use ="complete.obs"),2)
+
+corrplot.mixed(cor(depWeather, use ="complete.obs"), tl.col="black", lower.col = "black", number.cex = .7)
+```
+
+It looks like visibility is most related to departure delays, having a weak negative correlation. This makes sense, as visibility goes down, delays increase. In terms of arrival delays, it looks like visibility is again the largest predictor, having the largest negative correlation. Precipitation also seems to be up there, with a weak positive correlation with arrival delays, meaning that the more precipitation the longer the delays on average. This makes sense, especially considering precipitation contributed to visibility. 
+
+It would be interesting to visualize these relationships but I won't do that here. 
+
+
+
+d. What does `anti_join(flights, airports, by = c("dest" = "faa"))` tell you? What does `anti_join (airports, flights, by = c("faa" = "dest"))` tell you? [2 marks]
+```{r}
+anti_join(flights, airports, by = c("dest" = "faa"))
+``` 
+These joins have an affect on the rows not the columns. The join is being done by destination and returning all rows from flights which do not have a matching destination value in airports "faa" column. Only columns from flights are retained. Here we see the flights which do not have a matching destination in the airports data set. It looks like the destination 'BQN' is not in the airports data set. Google says that this is the "Rafael Hernández Airport" and is in Puerto Rico. Maybe that has something to do with why it isn't in the airports data set.
+ 
+```{r}
+anti_join (airports, flights, by = c("faa" = "dest"))
+```
+This join basically tells us the reverse. It's showing us the observations in the airports data set which do not have a match in terms of faa values in the flights dataset dest column. Essentially, no planes in the flights data set went to these airports and thus these are the unmatched ports. 
+
+e. You might expect that theres an implicit relationship between plane and airline, because each plane is flown by a single airline. Confirm or reject this hypothesis. [2 marks]
+
+This seems straight forward - you just need to know if each plane has more than a single carrier or not. I am not sure but I think some should.
+```{r}
+flights %>%
+  count(tailnum, carrier)
+``` 
+Here is just a simple count of tailnumbers to identify each plane and carriers. If any of these tail numbers appear more than once than they should have more than one carrier.
+
+```{r}
+( counts <- flights %>%
+              count(tailnum, carrier) %>%
+              count(tailnum) )
+```
+Now, if the counts for each tailnumber are simply 1 then that implicit relationship would exist. The counts column can be filtered to see that.
+```{r}
+# filter count for more than 1 of the same tailnum
+counts %>%
+      filter(nn > 1) %>%
+      drop_na()
+```
+It looks like there are in fact some planes which are associated with multiple carriers. So no this unique relationship between airline and planes does not exist in some cases. I imagine for a number of reasons that some carriers use or buy planes from other carries at some point in time. Perhaps some carriers are in a partnership? We might want to try to figure out exactly which planes these are but I think that would answer another question we aren't looking for. 
+  
+
+
+#Question 5 - Tidy Data[4 marks]
+
+a. Given the following dataset, do what you think is necessary in order to turn it into a proper tidy dataset (Note: this may require things talked about in both the data mungling lectures and some creativity). Before starting give careful consideration to what the actual variables are.  Justify your answer. [4 marks]  
+
+
+
+```{r}
+grades <- tbl_df(read.table(header = TRUE, text = "
+    ID  Test    Year    Fall    Spring  Winter
+    1   1       2008    15      16      19
+    1   1       2009    12      13      27
+    1   2       2008    22      22      24
+    1   2       2009    10      14      20
+    2   1       2008    12      13      25
+    2   1       2009    16      14      21
+    2   2       2008    13      11      29
+    2   2       2009    23      20      26
+    3   1       2008    11      12      22
+    3   1       2009    13      11      27
+    3   2       2008    17      12      23
+    3   2       2009    14      9       31
+"))
+```
+  
+Tests = observational units (should be in their own rows)
+
+
+```{r}
+library(forcats)
+
+grades2 <- grades %>%
+            gather(Season, Grade, Fall:Winter) %>%
+            mutate(Test = fct_recode(as.factor(Test),
+                   "Test 1" = "1", 
+                   "Test 2" = "2")) 
+
+grades2[, c(3,4)] <- lapply(grades2[, c(3,4)], factor)
+
+str(grades2)
+
+
+
+
+```
+  
+After speaking with you and better understanding that the students aren't what are being observed but rather their test grades, this should be tidy now. Since the tests are the observational units and they are taken across 2 years and 3 terms, each test for each student should appear across 6 rows. Thus, each student has 12 rows in the data set each (6 for both tests). After recoding variables to factors, these data can easily be visualized and worked with. I think the key words you spoke (if I can remember properly) were to "think about what you want to do / what you'll be able to do with the data after cleaning it." That really makes sense now. The first way I tried (below), isn't hard to work with but you also can't do much with it. If you do want to perform similar actions with the data below, then it would get quite annoying and difficult. 
+
+This question was really helpful and I am glad that I was confused and did it completely wrong the first time (below).
+
+
+...  
+
+
+
+**I'm going to keep the work below despite it being wrong. Could you please (if you have a minute) tell me if putting the data in this format is useful in any way? I knew this didn't feel right because it is so wide but I thought you wanted each student in one row. This isn't tidy correct? Unless the observations are students? (sounds silly when I say that out loud**
+
+<\br>  
+
+How I am going to approach this is to start by putting 2008 and 2009 data in their own tables. Why I want to do this is because I really want one observation to live within a single row in the final data set. Right now, observations reside in four rows of the original data set.  (edit: TURNS OUT THE OBSERVATIONS ARE NOT THE STUDENTS!!!)
+
+```{r}
+# only 08 data
+grades2008 <- grades %>%
+                  filter(Year == 2008)
+
+# only 09 data
+grades2009 <- grades %>%
+                  filter(Year == 2009)
+``` 
+
+Now, I will:  
+
+1. gather Fall, Spring, and Winter into 'Seasons' and 'Grade'    
+2. break test 1 and 2 into individual data sets by filtering by test  
+3. spread seasons back across columns by grade   
+4. rename columns appropriately giving descriptive var names   
+5. **OPTIONAL:** drop unneeded columns (this would be dropped by joining but I want it to be clean and consistent within each data set) using select. 
+
+```{r}
+# there is no point to commenting each line as I wrote it out step-by-step above ^^^^
+
+
+# 2008 test 1 data only
+grades_1_08 <- grades2008 %>%
+                  gather(Season, Grade, Fall:Winter) %>%
+                  filter(Test == 1) %>%
+                  spread(Season, Grade) %>%
+                  rename(Fall.08.Tst1 = Fall,
+                         Spr.08.Tst1 = Spring,
+                         Wnt.08.Tst1 = Winter) %>%
+                  select(-c(Test, Year))
+
+      
+# 2008 test 2 data only
+grades_2_08 <- grades2008 %>%
+                  gather(Season, Grade, Fall:Winter) %>%
+                  filter(Test == 2) %>%
+                  spread(Season, Grade) %>%
+                  rename(Fall.08.Tst2 = Fall,
+                         Spr.08.Tst2 = Spring,
+                         Wnt.08.Tst2 = Winter) %>%
+  
+                  select(-c(Test, Year))
+
+# 2009 test 1 data only
+grades_1_09 <- grades2009 %>%
+                  gather(Season, Grade, Fall:Winter) %>%
+                  filter(Test == 1) %>%
+                  spread(Season, Grade) %>%
+                  rename(Fall.09.Tst1 = Fall,
+                         Spr.09.Tst1 = Spring,
+                         Wnt.09.Tst1 = Winter) %>%
+                  select(-c(Test, Year))
+
+# 2009 test 2 data only
+grades_2_09 <- grades2009 %>%
+                  gather(Season, Grade, Fall:Winter) %>%
+                  filter(Test == 2) %>%
+                  spread(Season, Grade) %>%
+                  rename(Fall.09.Tst2 = Fall,
+                         Spr.09.Tst2 = Spring,
+                         Wnt.09.Tst2 = Winter) %>%
+                  select(-c(Test, Year))
+
+
+```
+  
+Next, I will:  
+
+1. join the 2008 data sets together by ID as the key value.  
+2. join the 2009 data sets together by ID again
+3. join new 2008 and 2009 by ID into one data set.  
+
+The final data set should be really wide with all of the students' information in one row each.  
+Another option would be to stop even at two data sets for each year and have 2 smaller data sets for each student. 
+
+```{r}
+# join 2008 grades
+all_grades_08 <- inner_join(grades_1_08, grades_2_08, by = "ID")
+# join 2009 grades
+all_grades_09 <- inner_join(grades_1_09, grades_2_09, by = "ID")
+# join all grades
+final_grades <- inner_join(all_grades_08, all_grades_09, by = "ID")
+
+```
+  
+The final data frame now has each students grades within one row of the data. It can be argued that the final_grades data set should not have been made and the two before it should have been kept separately. Not sure the best approach there. Shouldn't really matter in this case.
+
+Here is the final data set:  
+```{r}
+head(final_grades)
+```
+```{r}
+names(final_grades) # col names
+nrow(final_grades) # 3 student, 3 rows
+```
+  
+If I went with the two data sets approach, it would look like:
+```{r}
+head(all_grades_08)
+```  
+  
+and  
+
+```{r}
+head(all_grades_09)
+```
+This is completely wrong, though. Which is sad. But can it be useful at all?

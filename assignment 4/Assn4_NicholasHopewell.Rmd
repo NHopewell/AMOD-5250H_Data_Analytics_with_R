@@ -1,0 +1,702 @@
+---
+title: 'Assignment #4 - AMOD 5250H'
+author: "Nicholas Hopewell"
+date: "release date: 6/10/2018"
+output: html_document
+mainfont: Calibri
+monofont: Courier New
+fontsize: 10pt
+    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(tidyverse)
+library(lubridate)
+library(forcats)
+library(nycflights13)
+
+make_datetime_100 <- function(year, month, day, time) {
+  make_datetime(year, month, day, time %/% 100, time %% 100)
+}
+
+```
+**Make sure your solution to each question includes enough output to show that your solution is correct (i.e if asked to create a vector, output the vector afterwards)**
+
+#Question 1 - Dates [6 marks]
+a. Use the appropriate lubridate function to parse each of the following dates, underneath it's declaration [3 marks]:
+```{r}
+
+d1 <- "06-Jun-2017"
+dmy(d1)
+
+d2 <- "January 1, 2010"
+mdy(d2)
+
+d3 <- "12/30/14" # Dec 30, 2014
+mdy(d3)
+
+d4 <- c("August 19 (2015)", "July 1 (2015)")
+mdy(d4)
+
+d5 <- "2015-Mar-07"
+ymd(d5)
+```
+
+
+
+b.  Write a function that given your birthday (as a date), and my birthday (19770715), calculates the difference between our ages in seconds, and in years. [3 marks]
+```{r, error=T}
+
+jamie_bday <- ymd(19770715)
+nick_bday <- ymd(19930710)
+
+
+date_diff <- function(x, y) {
+      # require lubridate
+      if(!require(lubridate)) {
+         install.packages("lubridate", dependencies = TRUE, repos="http://cran.r-project.org")
+         library(lubridate)
+      }
+      # calculate ages
+      if(is.Date(x) & is.Date(y)){
+            x_age <- today() - x
+            y_age <- today() - y
+      } else {
+            stop("Please enter a valid date(s)")
+      }
+      # return difference in years
+      if (x_age <= y_age)
+            return(paste0("There is a difference of ", as.duration(y_age - x_age), 
+                          " between these ages. Person number 2 is older."))
+      else if (x_age > y_age)
+            return(paste0("There is a difference of ", as.duration(x_age - y_age), 
+                          " between these ages. Person number 1 is older."))
+      else
+            stop("Could not convert dates to duration. See ?help for package 'lubridate'")
+}
+
+# using dates
+date_diff(jamie_bday, nick_bday)
+# not a date
+date_diff(jamie_bday, "horse")
+
+```
+
+**For the remaining parts of Question 1 & 2, continue to use the nycflights data examined in class (combined code from the slides for adding correct dates to the dataframe is below).  Your date work should be done using `lubridate` **
+
+```{r}
+#update flights df with proper date/time objects
+flights_dt <- flights %>% 
+  filter(!is.na(dep_time), !is.na(arr_time)) %>% 
+  mutate(
+      #build proper date/times for flights
+    dep_time = make_datetime_100(year, month, day, dep_time),
+    arr_time = make_datetime_100(year, month, day, arr_time),
+    sched_dep_time = make_datetime_100(year, month, day, sched_dep_time),
+    sched_arr_time = make_datetime_100(year, month, day, sched_arr_time),
+    #fix the overnight flights
+    overnight = arr_time < dep_time,
+    arr_time = arr_time + days(overnight * 1),
+    sched_arr_time = sched_arr_time + days(overnight * 1)
+  ) %>% 
+  select(origin, dest, ends_with("delay"), ends_with("time"))
+```
+
+c. How does the average delay time change over the course of a day? Generate an appropriate graph to illustrate. Should you use dep_time or sched_dep_time? Why? [5 marks]
+
+```{r}
+avg_delay <- flights_dt %>%
+              mutate(sched_dep_hour = hour(sched_dep_time)) %>% # put into 24 hours
+              group_by(sched_dep_hour) %>%
+              summarise(dep_delay = mean(dep_delay, na.rm = TRUE)) # get avg
+
+
+# plot
+ggplot(avg_delay, aes(y = dep_delay, x = sched_dep_hour)) +
+      geom_point() +
+      geom_smooth(se = F) +
+      ggtitle("Average delay over course of day") +
+      theme_bw()
+
+```
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+I need to use scheduled departure time because that is the time the airline thought the plane would leave at. Any delays would be from that scheduled time.   
+
+Looking at this graph, the average delays seem to steadily increase before plateuing just before the end of the 24-hour cycle and ending with a noticible decay. 
+
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+d. On what day of the week should you leave if you want to minimise the chance of a delay?, What hour of the day? (You can choose to determine this graphically or numericallly) [4 marks] 
+```{r}
+# i assume you mean both types of delays?
+
+flights_dt %>%
+  mutate(day = wday(sched_arr_time)) %>% # put into days of week
+  group_by(day) %>% # group by days
+  summarise(avg_dep_del = mean(dep_delay, na.rm = TRUE), # get means
+            avg_arr_del = mean(arr_delay, na.rm = TRUE))
+
+```
+
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@  
+
+Sunday seems like the best day to travel if one wants to minimize delays (by far the lowest average arrival delay and about tied for lowest average departure delay. Monday is also a good choice but the average arrival delays are quite a bit higher than arrival delays on Sunday. 
+
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+ 
+#Question 2 - Hypothesis exporation [10 marks]
+In Hadley Wickham's book *R for Data Science*, he points out the oddity illustrated by the following graph:
+
+```{r fig.height=4}
+
+#Delay by Minute
+flights_dt %>% 
+  mutate(minute = minute(dep_time)) %>% 
+  group_by(minute) %>% 
+  summarise(
+    avg_delay = mean(arr_delay, na.rm = TRUE),
+    n = n()) %>%
+  ggplot( aes(minute, avg_delay)) +
+    geom_line()+
+    ggtitle("Average departure delay by minute within the hour")
+```
+
+It looks like flights leaving in minutes 20-30 and 50-60 have much lower delays than the rest of the hour.
+
+He also points out the that human nature often results in higher frequencies for "round numbers", which you can see in the graph below (and is something you should always be aware of when working with time data):
+
+```{r}
+#Scheduled Departures by Minute
+sched_dep <- flights_dt %>% 
+  mutate(minute = minute(sched_dep_time)) %>% 
+  group_by(minute) %>% 
+  summarise(
+    avg_delay = mean(arr_delay, na.rm = TRUE),
+    n = n())
+
+  ggplot(sched_dep, aes(minute, n)) +
+  geom_line()+
+    ggtitle("Scheduled Departures by Minute")
+
+```
+
+Although this explains part of the reason for the oddity in the first graph, it doesn't completely explain why the significant drop occurs *before* the half-hour and the hour.
+
+Exmaining the nature of flights might help.  `case_when()` is a method in **dplyr** we never talked about.  Find out how it works. Use it, in conjunction with `mutate()` and `factor()` to modify `flights_dt` and add a factor column called `type_delay` which has one of the following values `(late, ontime, early)` depending on which is relevent.
+
+```{r}
+# im going to use arrive delay.
+flights_dt <- flights_dt %>%
+                  mutate(type_delay = factor(case_when(.$dep_delay < 0 ~ "early",
+                                                       .$dep_delay == 0 ~ "ontime",
+                                                       .$dep_delay > 0 ~ "late")))
+
+#confirm
+str(flights_dt)
+
+```
+
+Now produce a graph similar to the *delay by minute* above, but this time, represent each category of `type_delay` as it's own line.
+
+```{r}
+
+#Delay by Minute
+flights_dt %>% 
+  mutate(minute = minute(dep_time)) %>% 
+  group_by(type_delay, minute) %>% 
+  summarise(
+    avg_delay = mean(arr_delay, na.rm = TRUE),
+    n = n()) %>%
+  ggplot( aes(minute, avg_delay, colour = type_delay)) +
+    geom_line()+
+    ggtitle("Average departure delay by minute within the hour")
+
+
+```
+
+Between this graph, and Hadley's *Scheduled Departures by Minute*, what can you conclude about the exceptionally low average departures at 20-30 and 50-60 minutes?
+
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@  
+
+It seems there are spikes in scheduled departures at these times. Around 30 mins there appears to be not only more scheduled flights but more are leaving early or no time (big dip in the late line of the plot above). Around 50-60 mins, again there are a lot of scheduled flights leaving early or on time (increase in early line in particular). I believe that these factors must be driving down the average delays at these time intervals. 
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@  
+
+
+
+#Question 3 - Distributions [3 marks]
+Choose one of the probabilty distributions not covered in class and describe it, with examples.  
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+The *gamma* distribution is a generalization of the chi-squared and exponential distributions. It is most commonly used as a continous model for wait times (similar to the exponential distribution), but is very flexible and used for many relationships. If someone were interested in modelling the amount of time the next certain number of events would take place, the gamma distribution would be appropriate. Another example of where this distribution would fit would be if one wanted to calculate the probabilty of room temperature increasing (say .5 - 2 degrees C) some time after a class enters a lecture hall. 
+
+
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+
+
+
+#Question 4 - Two Sample Statistical Tests [9 marks]
+Load *salaries.csv*, which contains the average male & female salaries (in 1000s) from 50 random collages in the US, and *BbVsFb.csv*, which contains weights of randomly sampled professional football and basketball players. Note that the two salary columns are dependant data, while the professional player data is independent. For each set of data (note: you are comparing the date within each set, not the sets), complete the following:
+
+a. Test each sample set for normalcy. Summarize the results. [3 marks]
+```{r}
+sal_data <- read_csv("salaries.csv") # dependant
+footWeight_data <- read_csv("BbVsFb.csv") # independant
+```
+**Normality**
+
+*>> Salary Data*  
+
+Historgrams with normal curves fit over top using each distributions mean and sd so smooth the curves.
+```{r, fig.height=8, fig.width=6, fig.align='center'}
+library(gridExtra)
+
+# hist for male sals
+s1 <- ggplot(sal_data, aes(males)) + 
+  geom_histogram(aes(y=..density..), colour="black", fill="grey85") +
+  labs(x="Male salaries", y = "Density")+
+  stat_function(fun = dnorm, geom = "point",  # add dnorm curve to plot as dotted line based on sd and mean
+                args = list(mean = mean(sal_data$males, na.rm = TRUE), sd = sd(sal_data$males, na.rm = TRUE)), 
+                colour = "dodgerblue4", size = 1.2) +
+      theme_minimal()
+
+# hist for female sals
+s2 <- ggplot(sal_data, aes(females)) + 
+  geom_histogram(aes(y=..density..), colour="black", fill="grey85") +
+  labs(x="Female salaries", y = "Density")+
+  stat_function(fun = dnorm, geom = "point",  # add dnorm curve to plot as dotted line based on sd and mean
+                args = list(mean = mean(sal_data$females, na.rm = TRUE), sd = sd(sal_data$females, na.rm = TRUE)), 
+                colour = "dodgerblue4", size = 1.2)+
+      theme_minimal()
+
+# arrange the plots ontop
+grid.arrange(s1, s2, ncol = 1)
+
+
+
+```
+  
+q-q plots for each salary  **with Shapiro-Wilks statistic and skewness annotation included**
+
+Theres actually a lot involved here and I have never seen another person (including online) do what I am about to do.
+
+```{r}
+
+# first, extract the W statistic and the associated p-vale from the test
+# broom is the best package ever and I think if anyone argues python is better for stats just show them how broom and tidyverse work - case closed
+
+library(broom)
+library(pastecs) # for skew and kurt
+
+( W_stat <- sal_data %>%
+            do(tidy(shapiro.test(.$males))) )# return a tidy date frame
+
+
+# THIS DOESNT WORK BECAUSE ITS NOT TIDY... well it does but its a lot harder to work with
+
+#w_stat <- getElement(shapiro.test(sal_data$males)$statistic, "W")
+#w_pval <- shapiro.test(sal_data$males)$p.value
+
+# save stuff
+W <- W_stat$statistic
+P <- W_stat$p.value
+
+
+( describe_s <- sal_data %>%
+                  do(tidy(stat.desc(.$males, basic = FALSE, norm = TRUE))) ) # get descriptives with skew and kurtosis
+
+( W_stat2 <- sal_data %>%
+            do(tidy(shapiro.test(.$females))) )# return a tidy date frame
+
+# save important stuff
+W2 <- W_stat2$statistic
+P2 <- W_stat2$p.value
+
+
+( describe_s2 <- sal_data %>%
+                  do(tidy(stat.desc(.$females, basic = FALSE, norm = TRUE))) ) # get descriptives with skew and kurtosis
+
+
+# extract skew.2SE
+
+skew_s <- describe_s %>% 
+      filter(names == "skew.2SE") %>%
+      select(x) %>%
+      round(digits = 6)
+
+# extrat for females
+skew_s2 <- describe_s2 %>% 
+      filter(names == "skew.2SE") %>%
+      select(x) %>%
+      round(digits = 6)
+
+
+```
+```{r, fig.width=5, fig.height=8, fig.align='center'}
+options(scipen = 999) # sci notation
+
+s1_qq <- ggplot(sal_data, aes(sample = males)) +
+            stat_qq() +
+            labs(x="Theoretical quantiles", y = "Sample qauntiles (Male salaries)") +
+            annotate("text", label = paste0("Shapiro-Wilk: ", signif(W, 3)), x = 1.22, y = 28) + # include w stat
+            annotate("text", label = paste0("p-val(.05): ", signif(P, 3)), x = 1.3, y = 27) + # include w p-val
+            annotate("text", label = paste0("skew.2SE: ", signif(skew_s, 3)), x = 1.2, y = 26) + # include skewness
+            theme_minimal()
+
+s2_qq <- ggplot(sal_data, aes(sample = females)) +
+            stat_qq() +
+            labs(x="Theoretical quantiles", y = "Sample qauntiles (Female salaries)") + 
+            annotate("text", label = paste0("Shapiro-Wilk: ", signif(W2, 3)), x = 1.22, y = 28) + # include w stat
+            annotate("text", label = paste0("p-val(.05): ", signif(P2, 3)), x = 1.3, y = 27) + # include w p-val
+            annotate("text", label = paste0("skew.2SE: ", signif(skew_s2, 3)), x = 1.25, y = 26) + # include skewness
+            theme_minimal() 
+
+grid.arrange(s1_qq, s2_qq, ncol = 1) # arrange on top
+```
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@  
+Comparing the histograms and ggplots with the descriptives as well as the shaprio-wilks stats, the distribution of male salaries approaches a normal distribution. Specifically, the distribton of these data do not significantly differ from a normal distribution. This is confirmed via the Shapiro statistic in which the null-hypothesis states the distribution in question does **not** differ from a normal distribution ($W_{males} =$ `r signif(W, 3)`, $p_{males} =$ `r signif(P, 3)`). This is further confirmed by by the skewedness of the distribution which does not exceed 2 standard errors from a mean of 0 (the mean of the standard $Z$ distribution).
+
+Looking at the distribution of female salaries, this distrbution is also approximately normally ($W_{females} =$ `r signif(W2, 3)`, $p_{females} =$ `r signif(P2, 3)`). 
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@  
+  
+Now to inspect the weight data for normality. I'll skip the histograms this time.
+```{r}
+
+# naming conventions when you do this stuff just dont work
+
+( W_stat3 <- footWeight_data %>%
+            do(tidy(shapiro.test(.$football))) )# return a tidy date frame
+
+
+
+# save stuff
+W3 <- W_stat3$statistic
+P3 <- W_stat3$p.value
+
+
+( describe_s3 <- footWeight_data %>%
+                  do(tidy(stat.desc(.$football, basic = FALSE, norm = TRUE))) ) # get descriptives with skew and kurtosis
+
+
+
+( W_stat4 <- footWeight_data %>%
+            do(tidy(shapiro.test(.$basketball))) )# return a tidy date frame
+
+# save important stuff
+W4 <- W_stat4$statistic
+P4 <- W_stat4$p.value
+
+
+( describe_s4 <- footWeight_data %>%
+                  do(tidy(stat.desc(.$basketball, basic = FALSE, norm = TRUE))) ) # get descriptives with skew and kurtosis
+
+
+# extract skew.2SE
+
+skew_s3 <- describe_s3 %>% 
+      filter(names == "skew.2SE") %>%
+      select(x) %>%
+      round(digits = 6)
+
+# extrat for females
+skew_s4 <- describe_s4 %>% 
+      filter(names == "skew.2SE") %>%
+      select(x) %>%
+      round(digits = 6)
+
+
+```
+```{r, fig.width=5, fig.height=8, fig.align='center'}
+options(scipen = 999) # sci notation
+
+s3_qq <- ggplot(footWeight_data, aes(sample = football)) +
+            stat_qq() +
+            labs(x="Theoretical quantiles", y = "Sample qauntiles (Football weights)") +
+            annotate("text", label = paste0("Shapiro-Wilk: ", signif(W3, 3)), x = 1.22, y = 248) + # include w stat
+            annotate("text", label = paste0("p-val(.05): ", signif(P3, 3)), x = 1.31, y = 245) + # include w p-val
+            annotate("text", label = paste0("skew.2SE: ", signif(skew_s3, 3)), x = 1.3, y = 242) + # include skewness
+            theme_minimal()
+
+s4_qq <- ggplot(footWeight_data, aes(sample = basketball)) +
+            stat_qq() +
+            labs(x="Theoretical quantiles", y = "Sample qauntiles (Basketball weights)") + 
+            annotate("text", label = paste0("Shapiro-Wilk: ", signif(W4, 3)), x = 1.22, y = 188) + # include w stat
+            annotate("text", label = paste0("p-val(.05): ", signif(P4, 3)), x = 1.31, y = 185) + # include w p-val
+            annotate("text", label = paste0("skew.2SE: ", signif(skew_s4, 3)), x = 1.25, y = 182) + # include skewness
+            theme_minimal() 
+
+grid.arrange(s3_qq, s4_qq, ncol = 1) # arrange on top
+```
+  
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@  
+Considering the q-q plots above, as well as the associated statistics and probabilities, the distribution of football player weights is approximately normal ($W_{football} =$ `r signif(W3, 3)`, $p_{football} =$ `r signif(P3, 3)`), and the distribution of basketball player weights is also approximately normal ($W_{basketball} =$ `r signif(W4, 3)`, $p_{basketball} =$ `r signif(P4, 3)`).  
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+
+  
+
+
+b. Test to see if the sample variances are significantly different. Explain the results [3 marks]
+
+```{r}
+# F test for salary data
+( F_sal<- sal_data %>%
+            do(tidy(var.test(.$males, .$females))) )
+
+# F test for football weight data
+( F_footWeight<- footWeight_data %>%
+                  do(tidy(var.test(.$football, .$basketball))) )
+
+```
+  
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+  
+Considering the salary data, the variance of the male and female distributions are not significantly different, $F_{salary}  =$ `r signif(F_sal$statistic, 3)`, $p_{salary} =$ `r signif(F_sal$p.value, 3)`. Consideing the weight data, the variance of the football and basketball distriubtions are also not significantly different, $F_{weight}  =$ `r signif(F_footWeight$statistic, 3)`, $p_{weight} =$ `r signif(F_footWeight$p.value, 3)`.   
+
+**As both of these assumptions have not been violated, a parametric Students $T$ is appropriate to compare sample means. Despite this being the case, I will also use a robust alternative which is more reliable and accurate in both situations where assumptions are and are not violated.**
+
+
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+c. Statistically compare the means of each set. What are the results? [3 marks]  
+
+\* **Note that the two salary columns are dependant data, while the professional player data is independent** *  
+
+Starting with two-sample $T$. I am not going to do a Welches ttest despite some people arguing it should always be used. I'll use a paired two sample ttest for the salary data and an independant two sample ttest for the weight data.
+```{r}
+#salary data first
+
+( t_sal <- sal_data %>%
+            gather("Gender", "Salary", everything()) %>% # gather
+            do(tidy(t.test(Salary ~ Gender, data = ., var.equal = TRUE, paired = TRUE))) ) # dependant t-test
+
+
+# weight data
+
+( t_footWeight <- footWeight_data %>%
+            gather("Sport", "Weight", everything()) %>% # gather
+            do(tidy(t.test(Weight ~ Sport, data = ., var.equal = TRUE, paired = FALSE))) ) # independant t-test
+
+
+
+```
+
+Method two: Comparing distance between means in terms of standard deviations. 
+```{r}
+
+( salSummary <- sal_data %>% 
+    gather("Gender", "Salary", everything()) %>% # gether
+    group_by(Gender) %>%  
+    summarize(sal.mean = mean(Salary),  # sum mean, sd, lower, upper
+              sal.sd = sd(Salary),
+              Lower = sal.mean - 2 * sal.sd / sqrt(NROW(Salary)),
+              Upper = sal.mean + 2 * sal.sd / sqrt(NROW(Salary))
+    )) 
+
+( weightSummary <- footWeight_data %>% 
+    gather("Sport", "Weight", everything()) %>% # gather
+    group_by(Sport) %>%
+    summarize(weight.mean = mean(Weight, na.rm = T), # rm na  -  # sum mean, sd, lower, upper
+              weight.sd = sd(Weight, na.rm = T),   # rm na
+              Lower = weight.mean - 2 * weight.sd / sqrt(NROW(Weight)),
+              Upper = weight.mean + 2 * weight.sd / sqrt(NROW(Weight))
+    )) 
+
+```
+  
+Method 3: overlapping confidence intervals
+```{r, fig.height=8, fig.width=6}
+# lot error bars
+s_err <- ggplot(salSummary, aes(x = sal.mean, y = Gender)) + 
+            geom_point() +
+            geom_errorbarh(aes(xmin = Lower, xmax = Upper), height=.2)+
+            theme_minimal()
+
+w_err <- ggplot(weightSummary, aes(x = weight.mean, y = Sport)) + 
+            geom_point() +
+            geom_errorbarh(aes(xmin = Lower, xmax = Upper), height=.2) +
+            theme_minimal()
+
+# arrange
+grid.arrange(s_err, w_err, ncol = 1)
+```
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+  
+*Conclusion*  
+
+To formally state our null and alternative hypotheses:
+
+* Salary data : $H_0:$ $\mu_{males} - \mu_{females} = 0$ versus $H_A$: $\mu_{males} - \mu_{females} =/= 0$  
+* Weight data : $H_0:$ $\mu_{football} - \mu_{basketball} = 0$ versus $H_A$: $\mu_{football} - \mu_{basketball} =/= 0$ 
+
+In the case of male and female salaries, these data do not provide sufficient evidence to suggest that average salaries between the two genders significantly differ from one another ($T$ = `r signif(t_sal$statistic, 3)`, $p$ = `r signif(t_sal$p.value, 3)`). Therefore, we fail to reject the null hypothesis. This lack of meaningful difference can also be seen in the overlapping errorbar plot.   
+
+In the case of football player and basketball player eights, these data do provide sufficient evidence to suggest that the average weights between these two types of players is significantly different from one another ($T$ = `r signif(t_footWeight$statistic, 3)`, $p$ = ~`r round(t_footWeight$p.value, 3)`). Therefore, we can safely reject the null hypothesis.  This difference can also be seen by the large separation between errorbars.   
+
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+
+    
+**>> Bonus Method 4: Difference in means simulation** 
+
+In the case that we might expect male salaries to be higher than female salaries ($H_A$: $\mu_1 > \mu_2$)
+
+```{r}
+
+# filter down and strip out male and female salaried as 2 vectors
+
+male_income <- salSummary <- sal_data %>% 
+    gather("Gender", "Salary", everything()) %>%
+    filter(Gender == "males") %>%
+    select(Salary) %>%
+    collect %>% .[["Salary"]]
+      
+female_income <- salSummary <- sal_data %>% 
+    gather("Gender", "Salary", everything()) %>%
+    filter(Gender == "females") %>%
+    select(Salary) %>%
+    collect %>% .[["Salary"]]
+
+# look at means
+mean(male_income)
+mean(female_income)
+```
+
+Now, let's compute a point estimate of the difference of mean:
+```{r}
+# get difference
+point_est <- mean(male_income) - mean(female_income)
+# se 
+SE <- sqrt( var(male_income)/length(male_income) + var(female_income)/length(female_income) )
+( test_stat0 <- point_est / SE )# basic test statistic
+
+```
+
+Now, to use permutation methods and create a simulation for testing this. First take all of the incomes, and sample for the men and the women. This is one permutation:
+
+```{r}
+# concate them both to sample 
+total_income <- c(male_income, female_income)
+n_men <- length(male_income) # get lens
+n_fem <- length(female_income)
+samp <- sample(total_income, size = n_men + n_fem, replace = FALSE) #sample from salary
+samp_men <- (samp[1:n_men]) # samp start of vec
+samp_fem <- (samp[(n_men + 1):(n_men + n_fem)]) # samp len men +1 to end
+( test_stat <- (mean(samp_men) - mean(samp_fem)) / sqrt( var(samp_men)/n_men + var(samp_fem)/n_fem) ) # compute t
+
+```
+
+Now, this can be turned into a proper simulation. 
+```{r}
+# empty vector to fill
+res <- vector(length = 10000)
+
+# same stuff just now in a for loop with a vector to populate:
+for(j in 1:10000) {
+  samp <- sample(total_income, size = n_men + n_fem, replace = FALSE)
+  samp_men <- (samp[1:n_men])
+  samp_fem <- (samp[(n_men + 1):(n_men + n_fem)])
+  res[j] <- (mean(samp_men) - mean(samp_fem)) / sqrt( var(samp_men)/n_men + var(samp_fem)/n_fem )
+}  
+
+#hist results of simuation:
+hist(res)
+abline(v = test_stat0, col = "red")
+```
+
+
+Then, our empirical *p*-value is computed as:
+```{r}
+( p_val <- length( which ( res >= test_stat0 ) ) / 10000 ) # because I did 10k iters
+```
+
+The conclusion is then that we reject the null hypothesis, and conclude that the data do not provide convincing evidence of $\mu_1 > \mu_2$, in other words, mean male and female incomes do not significantly differ.
+
+Let's conclude by doing this the "fast" way. 
+```{r}
+1 - pnorm(test_stat0)
+```
+  
+  
+**Not going to do this for weight data.**
+
+
+
+#Question 5 - Linear Regresssion [12 marks]
+
+Load *Insurance.csv*, which contains auto insurance information for regions Sweden. Where `X = number of claims` and `Y = total payment for all the claims in thousands` (Swedish Kronor).
+
+a. Use summary and plot to investigate the data. Identify anything worth noting. [2 marks]
+```{r}
+insure_data <- read_csv("insurance.csv")
+
+summary(insure_data)
+plot(insure_data)
+
+```
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+Firstly, there is clearly a linear relationship between number of claims and total payment for all the claims.  
+Secondly, there are a couple outliers but because of where they fall, they should impact the fit of a linear model very much.
+
+
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+b. Perform a simple linear regression to generate a model for the relationship. [1 mark] 
+```{r}
+( results <- lm(y ~ x, data = insure_data) )
+
+```
+
+c. Plot the model for evaulation and summarize the results. [3 marks]
+
+```{r}
+plot(insure_data)
+abline(results)
+
+plot(results)
+
+```
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@  
+
+It looks like number of claims is a good predictor of total payment for all the claims. As the number of claims increases. so does the total payment for all cliams. The only difference between this simle regression and correlation is the predictions one can make. R2 for simple linear regression is just the bivariate correlation squared.
+
+Like I thought, the outliers do not impact the model fit due to their positions on the y axis.  
+
+The residuals are roughly normally distributed but these data may be heteroscedastic.
+
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+d. Output the summary of your model and explain the relevent things it tells you. [4 marks]
+
+```{r}
+summary(results)
+
+```
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@  
+
+From the model summary above, number of claims is a significant predictor of total payment for all the claims $p < .05$. 
+
+The intercept states the total payment for all claims when non claims are made in thousands of dollars (about $20,000).
+The slope relates to the influence of number of claims on total claim payment. For every one additonal claim, the model predicts an increase in total payments by about $3,400.
+
+Looking at the standard error around this predicted change, the average difference from the true total payment and the coefficient was quite small relative to the coefficient itself. The total payement based on our prediction may vary on average by ~$195.
+
+Looking at $R^2$, the proportion of variance in total payment which can be accounted for by number of claims is ~83.3%
+
+
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+e. Use the model to predict the total claim, if the number of accidents is 80 and 150. [2 marks]
+
+```{r}
+predict(results, data.frame(x = c(80, 150)))
+
+```
+
+With 80 claims made, the model predicts a total cost of about $293k.  
+With 150 claims made, the model predicts a total cost of about $532k.
+
+
+
+

@@ -1,0 +1,531 @@
+---
+title: "Introduction to data.table"
+subtitle: "High-performance data processing"
+author: "Nicholas Hopewell"
+date: "June 20, 2018"
+output: slidy_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(data.table)
+library(tidyverse)
+library(nycflights13)
+```
+
+##
+
+<br />  
+<center>![](C:\Desktop\Assignments\Data analytics with R\package presentation\connornashtweet.png)<center>
+<center>![](C:\Desktop\Assignments\Data analytics with R\package presentation\alextweet.png)<center>
+<center>![](C:\Desktop\Assignments\Data analytics with R\package presentation\joetweet.png)<center>  
+
+## What is data.table (package)?
+  
+<br />  
+
+*  offers fast data processing
+*  alternative to dplyr (but not mutually exclusive)
+*  base object is a data.table rather than a tbl_df -> both behave just like base R data.frame
+*  makes it easy to turn an existing data frame into a data table
+*  great for very large data sets - benefits for data.table only scale-up with size of data (up to about ~70x faster than base R and ~50x faster than dplyr for some common tasks on large data sets).    
+
+
+<br />   
+
+* *Why?*  smart computational principles implemented in C for computationally efficiency. 
+
+<br />    
+
+* Github: <https://github.com/Rdatatable/data.table/wiki>
+* See: 'Efficient R Programming' - <https://csgillespie.github.io/efficientR/data-processing-with-data-table.html> 
+
+
+## What is a data.table (object)
+
+* Special case of a data.frame - an enhanced data.frame
+* Set of columns of same length but can be different data types. 
+* accepted by almost all base R packages because of this.
+* clever bit: data.table will look at where it's being called from, and if the package calls data.frame syntax on the data.table, data.table switches at the top of its method (square brackets) automatically to a base R data.frame if the package is not compatible with DTs.
+
+Manipulating a data.table:   
+
+1. Reduces programming time over base R (and usually dplyr)
+      + fewer function calls
+      + less variable name repetition (sound familiar?)
+      
+2. Reduces compute time:
+      + particularly fast subset, grouping/aggregation,  update,  and joins
+      + update by reference
+      
+
+
+## Enhanced data.frame?
+
+
+ **Three main enhancements:**
+
+1. Allow column names to be seen as variables within [...]
+      
+2. Since they’re variables, we can do computations on them directly, i.e, within [...]
+      
+3. Additional argument 'by' 
+
+data.table also *a lot* more than just sub-setting and selecting within [...]
+
+
+<br />   
+ 
+ 
+Also, better **character storage**
+
+Character vectors in R are stored efficiently. In general, character storage is a positive thing for R users.  
+
+* if the same char string is repeated in a vector, R won't store it all in memory but instead cache the unique string values globally
+* simply contains pointers in the vector to that global cache  
+
+data.table makes full use out of the R global cache by not converting characters to factors like dplyr
+
+
+## Notice classes and data types
+
+```{r, echo=T}
+flights <- data.table(flights) #nycflights13
+str(flights)
+```
+
+
+
+
+## Overview  
+
+* Structure everything in basic units - rows, columns, and groups
+* DT syntax gives a placeholder for these units
+
+<br /> 
+<center>![](C:\Desktop\Assignments\Data analytics with R\package presentation\generalform.png)<center> 
+
+take 'i' from DT and calculate 'j' grouped by 'by' 
+
+
+## General syntax example to start
+
+```{r, echo=FALSE}
+
+library(data.table)
+
+```
+
+Recall general data.table query takes 3 parts: **i** - **j** - **by**
+```{r, echo = T, eval= F}
+
+mtcarsDT <- data.table(mtcars)  # one way
+
+mtcarsDT[
+      mpg > 20,                               #  i 
+      .("AvgHP" = mean(hp, na.rm = T),        #  j
+        "MinWT(kg)" = min(wt * 453.6)),  
+      by = .(cyl, "under5gears" = gear < 5)   #  by
+]
+
+```
+
+* i : select from mtcars, all rows where mpg greater than 20
+* j : from these rows, take average horsepower and min weight in kg
+* by : group rows by cylinder and whether the the have 5 gears or not.
+
+**TLDR:** take 'i' from DT and calculate 'j' grouped by 'by'   
+
+
+>> These map to SQL as such: WHERE, SELECT, GROUP BY  
+
+
+
+## Some basics (very, very basic)
+
+<br /> 
+
+
+The goal is not to cover every basic building block, just key pieces.
+
+<br /> 
+
+Comprehensive tutorials:  
+
+<https://www.datacamp.com/courses/data-table-data-manipulation-r-tutorial>  
+<http://divenyijanos.github.io/documents/erum_workshop_datatable.html#12>  
+<https://www.slideshare.net/Sheffield_R_/introduction-to-datatable-in-r>  
+
+
+##  Subset rows in i
+
+```{r, echo= T, eval = F}
+
+flights[origin == "JFK" & month == 6L] 
+
+```
+Some subtle things to notice here...  
+
+* Within the frame of a data.table, columns can be referred to as if they are variables. Do not need to add the prefix flights$ each time (but that would still work).  
+* A comma after the condition is also not required in i. But flights[dest == "JFK" & month == 6L, ] would work. In data.frames however, the comma is necessary.
+
+
+Sort flights first by column origin in ascending order, and then by dest in descending order...
+
+```{r, echo=T, eval=F}
+flights[order(origin, -dest)]
+```
+
+* Use “-” on a character columns within data.table to sort in decreasing order (rather than desc()).
+
+* Order(...) within the frame of a data.table uses data.table’s internal order forder(), which is much faster than base::order. 
+
+
+## Select columns in j
+
+And return a data.table...
+
+```{r, eval=T,echo=T}
+
+ans <- flights[, list(arr_delay)]  
+head(ans)
+```
+
+* Wrap the variables (column names) within list() so that a data.table is returned. With a single column, not wrapping with list() returns a vector
+* data.table also allows using .() to wrap columns with. It is an alias to list(); they serve the same purpose. See below example.  
+
+> Select both arr_delay and dep_delay columns and rename them to delay_arr and delay_dep.
+
+```{r, eval=T,echo=T}
+ans <- flights[, .(delay_arr = arr_delay, delay_dep = dep_delay)]
+head(ans)
+```
+
+
+*note:* data.tables and data.frames are internally lists, but with equal length columns and a class attribute. Because j can return a list, converting and returning a data.table is done very efficiently.
+
+
+
+## Compute or do in j
+
+> How many trips have had total delay < 0?
+
+```{r, eval=T,echo=T}
+flights[, sum((arr_delay + dep_delay) < 0, na.rm = T)]
+```
+
+
+> Calculate the average arrival and departure delay for all flights with “JFK” as the origin airport in the month of June.
+
+```{r, echo=T}
+flights[origin == "JFK" & month == 6L,
+         .(m_arr = mean(arr_delay, na.rm = T), m_dep = mean(dep_delay, na.rm = T))]
+
+```
+
+
+**note:** Because the three main components of the query (i, j and by) are together inside [...], data.table can see all three and optimize the query altogether *before* evaluation, not each separately, for both speed and memory efficiency.
+
+
+## Aggregation - group 'by'
+
+```{r, echo = T}
+flights[carrier == "AA",
+        .(mean(arr_delay), mean(dep_delay)),
+        by = .(origin, dest, month)]
+```
+
+* did not provide column names for expressions in j, they were automatically generated (V1, V2)
+
+**chaining** [...][...][...]
+
+```{r, echo=T}
+flights[carrier == "AA", .N, by = .(origin, dest)
+      ][order(origin, -dest)]
+```
+
+
+**Multiple columns using .SD**
+
+```{r, echo=T}
+flights[carrier == "AA",                       ## Only on trips with carrier "AA"
+        lapply(.SD, mean),                     ## compute the mean
+        by = .(origin, dest, month),           ## for every 'origin,dest,month'
+        .SDcols = c("arr_delay", "dep_delay")] ## for just those specified in .SDcols
+```
+
+
+
+## Compare code to base R
+
+<br />  
+
+<center>![](C:\Desktop\Assignments\Data analytics with R\package presentation\codecompare.png)<center> 
+
+
+
+
+
+## Dplyr vs. data.table syntax 
+<br />   
+ 
+Comparison of syntax:
+
+* data.table is harder to learn and read than dplyr (but can solve things dplyr cannot)
+* dplyr constrains your options, according to Hadley, almost all single table problems can be solved with filter, select, mutate, arrange and summarize, along with "group by". This is *very* helpful and helps contain the problem mentally.
+* with dplyr, each verb mapped to one easy to understand function
+* can string together complex piping operations with magrittr compatibility '%>%' - this is huge and can be applied to so many packages (tidyverse included).  
+
+<br />    
+
+Learn and compare all the unique syntax of data.table  
+<https://cran.r-project.org/web/packages/data.table/vignettes/datatable-intro.html> 
+
+## Compare syntax handling the same problem:
+
+**dplyr**
+
+```{r, echo = T, eval = F}
+diamonds %>%
+  filter(cut != "Fair") %>%
+  group_by(cut) %>%
+  summarize(
+    AvgPrice = mean(price),
+    MedianPrice = as.numeric(median(price)),
+    Count = n()
+  ) %>%
+  arrange(desc(Count))
+```
+If you have never used R or dplyr, you can pretty much read this like English words. The verbs allow you to organize this logically and clearly.
+
+**data.table**
+```{r, echo = T, eval = F}
+diamondsDT[
+  cut != "Fair", 
+  .(AvgPrice = mean(price),
+    MedianPrice = as.numeric(median(price)),
+    Count = .N
+  ), 
+  by = cut
+][ 
+  order(-Count) 
+]
+```
+
+So, less typing by using '[' vs. verbs, but also less understandable and can't be piped. You basically have to know data.table syntax at least a bit. And it gets much more complicated - looking back after some time can be a pain.  
+
+
+**Conclusion:**   
+dplyr was not made with large data in mind, Hadley optimized dplyr for expressiveness on medium data (which it does well).   
+data.table can be used when raw speed, rather than readability, is desired for bigger data.
+
+
+
+## Data.table reference semantics
+
+**shallow vs deep copy**
+
+* Shallow copy - simply a copy of the vector of column pointers (corresponding to the columns in a data.frame or data.table). The actual data is not physically copied in memory.
+
+* Deep copy - copies the entire data to another location in memory.
+
+Base R makes a lot of deep copies which hurts performance...
+
+```{r, echo = T, eval = F}
+DF$c[DF$ID == "b"] <- 15:13 # (2) -- subassign in column 'c'
+```
+* The entire column is deep copied. Thus, the more sub assigned columns in the same query, the more deep copies R does.
+
+
+* data.table’s **:=** operator does not make any copies, irrespective of R version you are using. This is because := operator updates data.table columns in-place (by reference).
+
+```{r, echo = T, eval=F}
+DT[, `:=`(colA = valA,  # valA is assigned to colA
+          colB = valB,  # valB is assigned to colB
+          ...
+)]
+```
+
+**note** here, we don’t assign the result back to a variable. Because we don’t need to. The input data.table is **modified by reference.**
+
+
+> Drop a column by reference
+
+```{r, eval=F, echo=T}
+flights[, delay := NULL]
+```
+
+
+**:= and copy()**
+
+* sometimes you don't want := to update the original object, can use copy() for that. 
+
+example: function which returns max speed of each month... column speed is added to the object in the example below
+```{r, eval = F, echo=T}
+foo <- function(DT) {
+  DT[, speed := distance / (air_time/60)]
+  DT[, .(max_speed = max(speed)), by = month]
+}
+```
+
+Now with copy...
+
+The copy() function **deep copies** the input object and therefore any subsequent update by reference operations performed on the copied object will not affect the original object.
+
+```{r, eval = F, echo= T}
+foo <- function(DT) {
+  DT <- copy(DT)                              ## deep copy
+  DT[, speed := distance / (air_time/60)]     ## doesn't affect 'flights'
+  DT[, .(max_speed = max(speed)), by = month]
+}
+```
+
+
+
+
+## Multiple tables
+
+<br /> 
+
+<center>![](C:\Desktop\Assignments\Data analytics with R\package presentation\2tables1.png)<center>
+
+<br />   
+
+<center>![](C:\Desktop\Assignments\Data analytics with R\package presentation\2tables2.png)<center> 
+
+
+
+
+## Reading, Writing, Sorting performance
+
+<br />   
+
+ <center> **data.table created with fread() or data.table()** <center> 
+
+<br /> 
+
+<center>![](C:\Desktop\Assignments\Data analytics with R\package presentation\fread.png)![](C:\Desktop\Assignments\Data analytics with R\package presentation\fread2.png) <center>  
+
+<br /> 
+
+ <center> **fwrite - parallel file writer faster than feathers binary write** <center>
+
+<br /> 
+
+<center>![](C:\Desktop\Assignments\Data analytics with R\package presentation\fwrite.png)<center>  
+
+<br /> 
+
+ **fsort - parallel sort**
+
+<br /> 
+
+<center>![](C:\Desktop\Assignments\Data analytics with R\package presentation\fsort.png)<center>  
+
+
+
+
+##  Keys and fast binary search based subset
+
+
+* We saw how to subset rows in i using order() and other methods. Another way of sub-setting which is incredibly fast  is to use keys.
+
+* Keys are basically supercharged row names which order the table based on one or more variables. This allows a **binary search** algorithm to subset the rows of interest, which is much, much faster than the **vector scan** approach used in base R 
+
+* data.table uses the key values for sub-setting by default so the variable does not need to be mentioned again. Instead, using keys, the search criteria is provided as a list (invoked below with the concise .() syntax below)...
+
+```{r, eval=F, echo=T}
+# Base  with DT
+DT[Country == "Australia"]
+
+
+# set key with DT
+setkey(DT, Country)
+
+DT[.("Australia")]
+```
+
+* The result is the same, but with one extra key step... why?  
+* sorting once this way results in substantial performance gains in situations where **repeatedly subsetting rows on large datasets** consumes a large proportion of computational time.
+
+
+<br /> 
+
+<center>![](C:\Desktop\Assignments\Data analytics with R\package presentation\setkey.png)<center> 
+
+
+Conclusions:  
+
+* data.table is much faster than base R and dplyr at sub-setting, the relative benefits of data.table improve with data set size, approaching a **~70 fold improvement on base R and a ~50 fold improvement on dplyr** as the data set size reaches half a Gigabyte.
+
+* Even the ‘non key’ data.table subset method is much faster because data.table **creates a key internally by default before subsetting**.
+
+
+
+## What about DT versus pandas?
+
+
+It has, until recently, DT was super fast or equivalent to pandas in terms of speed and could simply handle more data.  
+
+<br />   
+
+**Official benchmarks from 2014**
+
+* 5g data set --  versus -- 100g data set
+
+
+![](C:\Desktop\Assignments\Data analytics with R\package presentation\5g_bench.png) ![](C:\Desktop\Assignments\Data analytics with R\package presentation\100g_bench.png)  
+
+
+## Feb 2018 DT versus Pandas benchmarks - common data wrangling tasks 
+* Pandas version 0.22 and data.table version 1.10.4-3
+
+**Results summary:**
+
+* data.table  faster when selecting columns (pandas-on average takes 50% more time)
+* pandas is faster at filtering rows (roughly 50% on average)
+* data.table seems to be considerably faster at sorting (pandas was sometimes 100 times slower)
+* adding a new column faster with pandas
+* aggregating results are mixed  
+
+<br />    
+
+Links to trials:  
+part 1 - <https://www.statworx.com/de/blog/pandas-vs-data-table-a-study-of-data-frames/>  
+part 2 - <https://www.statworx.com/de/blog/pandas-vs-data-table-a-study-of-data-frames-part-2/>  
+complete study: <https://github.com/STATWORX/blog/tree/master/pandas_vs_datatable>
+
+
+
+## Note about RAM 
+
+<br />  
+
+      
+Everything is in RAM - particularly useful with Amazon EC2 where terabytes of RAM are cheap.  
+
+<br />    
+
+*Note on in-RAM*: A disadvantage is that R objects must fit in memory, but several R packages are changing this:  
+
+<br />  
+
+
+* **ff** >>> <https://www.r-bloggers.com/if-you-are-into-large-data-and-work-a-lot-with-package-ff/>
+* **bigmemory** >>>  <http://www.stat.yale.edu/~mjk56/temp/bigmemory-vignette.pdf>
+* mmap
+* indexing  
+
+
+## Additional resources 
+
+<br />  
+<br />  
+
+* data.table cheat sheet: <https://s3.amazonaws.com/assets.datacamp.com/blog_assets/datatable_Cheat_Sheet_R.pdf>
+* comprehensive list of FAQ's: <https://cran.r-project.org/web/packages/data.table/vignettes/datatable-faq.html>
+* reshaping: <https://cran.r-project.org/web/packages/data.table/vignettes/datatable-reshape.html>
+* good talk: <http://divenyijanos.github.io/documents/erum_workshop_datatable.html#12>
+
+
+
